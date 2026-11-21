@@ -1,0 +1,22 @@
+[
+  {
+    "file": "S6006-drawings.pdf",
+    "sha256": "e2a2c992ffd965c9d15ac5cd553191202c5b2fc855b14f6ab33577e9271b3c8e",
+    "bytes": 16843402
+  },
+  {
+    "file": "S6006-calculations.pdf",
+    "sha256": "5fe3eaf702d24d090fc51a502d19378b2c60584dde1e0e13669590340a1462f3",
+    "bytes": 3267299
+  },
+  {
+    "file": "S6006-BOQ.xlsx",
+    "sha256": "be694c068c32f575ad6f6680f5004e123c1b7a39688a2be79421254f376bd008",
+    "bytes": 1406852
+  },
+  {
+    "file": "S6006-BOQ-total.pdf",
+    "sha256": "d36a2ec2b87d49b6a91060611ef61d862a56248eaadc911fdee96bcfa9679b0a",
+    "bytes": 69288
+  }
+]

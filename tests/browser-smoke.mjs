@@ -6,9 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { runS6006Checks } from './s6006-browser.mjs';
 
 // Normal end-to-end tests run in CI with Playwright's installed Chromium.
-// All fixtures are synthetic. No uploaded project files or tutorial images are used.
+// Studio fixtures are synthetic. S6006 uses the reviewed derived numeric dataset; raw uploaded source files and tutorial images are not served.
 const root = fileURLToPath(new URL('..', import.meta.url));
 const output = path.join(root, 'test-results');
 const fixtures = path.join(output, 'fixtures');
@@ -351,6 +352,7 @@ try {
     });
     await reference.context.close();
   }
+  await runS6006Checks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';
