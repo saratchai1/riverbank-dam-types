@@ -120,7 +120,7 @@ export async function runS6006InvestigationChecks({newPage,check,screenshot,asse
   let fixture=completeProject();
   fixture=saveAlternative(fixture,'A · ฐานที่ผูกไว้',source,{id:'basis-a',createdAt:stamp});
   fixture=updateActiveScenario(fixture,{geometry:{slopeH:3.8},context:{waterHighLevel:2}},source);
-  fixture=saveInvestigationMetadata(fixture,'soil',{...soilMetadata,notes:'SOIL_CURRENT_REVISED'},source);
+  fixture=saveInvestigationMetadata(fixture,'soil',{...soilMetadata,boreholeId:'BH-7',notes:'SOIL_CURRENT_REVISED'},source);
   fixture=saveInvestigationMetadata(fixture,'water',{...waterMetadata,notes:'WATER_CURRENT_REVISED'},source);
   fixture=selectStation(fixture,second.id,source);
   fixture=saveInvestigationMetadata(fixture,'soil',{...soilMetadata,notes:'EXCLUDED_SECOND_STATION'},source);
@@ -168,6 +168,7 @@ export async function runS6006InvestigationChecks({newPage,check,screenshot,asse
     await importProject(p,fixture,'s6006-investigation-project.json');await panel(p,'investigation');
     await assertState(p,'soil','stale');await assertState(p,'water','stale');
     assert.equal(await group(p,'soil').locator('[data-investigation-changed-field="geometry.slopeH"]').count(),1);
+    assert.equal(await group(p,'soil').locator('[data-investigation-changed-field="boreholeId"]').count(),1);
     assert.equal(await group(p,'soil').locator('[data-investigation-changed-field="notes"]').count(),1);
     assert.equal(await group(p,'water').locator('[data-investigation-changed-field="context.waterHighLevel"]').count(),1);
     await p.locator('#investigation-content').scrollIntoViewIfNeeded();await screenshot(p,'s6006-investigation-desktop.png',false);
@@ -221,6 +222,11 @@ export async function runS6006InvestigationChecks({newPage,check,screenshot,asse
       const entries=await report.locator('[data-investigation-entry-key]').evaluateAll(els=>[...new Set(els.map(el=>el.dataset.investigationEntryKey))]);
       assert.deepEqual(entries.sort(),(kind==='current'?[first.id+'/current']:[first.id+'/current',first.id+'/basis-a']).sort());
       assert.equal(await report.locator('[data-investigation-entry-key="'+first.id+'/current"][data-investigation-kind="soil"]').first().getAttribute('data-investigation-state'),'stale');
+      const currentSources=report.locator('[data-investigation-entry-key="'+first.id+'/current"]');
+      assert.equal(await currentSources.locator('[data-investigation-source-role="current"]').innerText(),'BH-7 · RIVER');
+      assert.equal(await currentSources.locator('[data-investigation-source-role~="bound"]').innerText(),'BH-1 · LAND');
+      assert.ok(text.includes('ช่องว่างในต้นฉบับ · ไม่ทราบ'));
+      assert.ok(text.includes('-7.00 M.'));
       if(kind!=='current')assert.equal(await report.locator('[data-investigation-entry-key="'+first.id+'/basis-a"][data-investigation-kind="soil"]').first().getAttribute('data-investigation-state'),'current');
       opened.push({kind,report,text});
       if(kind==='current')currentReportURL=report.url();
@@ -234,7 +240,7 @@ export async function runS6006InvestigationChecks({newPage,check,screenshot,asse
         await report.locator('.investigation-appendix').first().scrollIntoViewIfNeeded();
         await screenshot(report,'s6006-investigation-report.png',false);
       }
-      await printReport(report,'S6006-investigation-'+kind,['SOIL_CURRENT_REVISED','SOIL_BOUND_ORIGINAL','WATER_CURRENT_REVISED','WATER_BOUND_ORIGINAL']);
+      await printReport(report,'S6006-investigation-'+kind,['SOIL_CURRENT_REVISED','SOIL_BOUND_ORIGINAL','WATER_CURRENT_REVISED','WATER_BOUND_ORIGINAL','BH-7','BH-1','-7.00 M.']);
       await report.close();
     }
     assertNoErrors(desktop.diagnostics);
