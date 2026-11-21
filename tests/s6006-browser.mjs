@@ -382,9 +382,9 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await reportSnapshotPage.setViewportSize({width:680,height:1100});
     const fits=await reportSnapshotPage.locator('.report-page').evaluateAll(pages=>pages.map((p,i)=>{
       const bottom=Math.max(...[...p.children].filter(el=>!el.classList.contains('running-foot')).map(el=>el.getBoundingClientRect().bottom));
-      return {page:i+1,title:p.dataset.pageTitle,fits:bottom<=p.querySelector('.running-foot').getBoundingClientRect().top-2};
+      return {page:i+1,title:p.dataset.pageTitle,fits:bottom<=p.querySelector('.running-foot').getBoundingClientRect().top-12};
     }));
-    assert.deepEqual(fits.filter(p=>!p.fits),[],'Current values must fit the printed report too');
+    assert.deepEqual(fits.filter(p=>!p.fits),[],'Current values must keep at least 12px clear of the printed footer too');
     await reportSnapshotPage.pdf({path:path.join(output,'S6006-current-scenario-calculations.pdf'),format:'A4',printBackground:true,preferCSSPageSize:true});
     await reportSnapshotPage.emulateMedia({media:'screen'});
     assertNoErrors(diagnostics);
@@ -425,10 +425,10 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
       const footer = page.querySelector('.running-foot').getBoundingClientRect();
       const children = [...page.children].filter(el => !el.classList.contains('running-foot'));
       const bottom = Math.max(...children.map(el => el.getBoundingClientRect().bottom));
-      return { page: index + 1, title: page.querySelector('.running-foot')?.textContent, availableBottom: footer.top, contentBottom: bottom, fits: bottom <= footer.top - 2 };
+      return { page: index + 1, title: page.querySelector('.running-foot')?.textContent, availableBottom: footer.top, contentBottom: bottom, fits: bottom <= footer.top - 12 };
     }));
     await writeFile(path.join(output, 's6006-report-page-metrics.json'), JSON.stringify(metrics, null, 2));
-    assert.deepEqual(metrics.filter(m => !m.fits), [], 'Report content must stay above each printed footer');
+    assert.deepEqual(metrics.filter(m => !m.fits), [], 'Report content must keep at least 12px clear of each printed footer');
     const pdfPath = path.join(output, 'S6006-engineering-calculations.pdf');
     await p.pdf({ path: pdfPath, format: 'A4', printBackground: true, preferCSSPageSize: true });
     const pdf = await readFile(pdfPath);
