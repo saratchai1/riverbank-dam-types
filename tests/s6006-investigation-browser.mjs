@@ -131,11 +131,12 @@ export async function runS6006InvestigationChecks({newPage,check,screenshot,asse
     await p.goto(baseURL+'/projects/s6006/');await ready(p);await panel(p,'investigation');
     await assertState(p,'soil','missing');await assertState(p,'water','missing');
     assert.equal(await p.locator('[data-investigation-borehole]').count(),8);
+    await p.locator('.investigation-catalogue > summary').click();
+    assert.equal(await p.locator('[data-investigation-borehole="BH-7"]').isVisible(),true);
     assert.ok((await p.locator('[data-investigation-borehole="BH-7"]').innerText()).includes('ไม่ระบุในต้นฉบับ'));
     assert.ok((await p.locator('[data-investigation-borehole="BH-1"]').innerText()).includes('-7.00 M.'));
     const beforeRevision=await p.locator('#project-revision').innerText();
     const beforeSoil=await p.locator('#soil-form').evaluate(form=>Object.fromEntries([...form.elements].filter(el=>el.name).map(el=>[el.name,el.value])));
-    await p.locator('.investigation-catalogue > summary').click();
     await p.locator('[data-investigation-use-borehole="BH-1"]').click();
     assert.equal(await p.locator('#investigation-soil-boreholeId').inputValue(),'BH-1');
     assert.ok((await p.locator('#investigation-soil-locator').inputValue()).includes('PDF หน้า 4'));
