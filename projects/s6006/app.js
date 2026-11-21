@@ -107,7 +107,9 @@ function renderStations(){
   $('#station-table tbody').innerHTML=audit.rows.map(row=>{
     const m=row.measures.find(x=>x.key===key);
     const delta=m.contribution===null||m.cachedProduct===null?null:m.contribution-m.cachedProduct;
-    const stationId=catalog.find(s=>s.reach===row.reach&&s.sourceRow===row.sourceRow)?.id;
+    // The audit labels reaches as R1/R2; catalog reach is numeric. Join on source identity.
+    const stationId=catalog.find(s=>s.sourceSheet===row.sourceSheet&&s.sourceRow===row.sourceRow)?.id;
+    if(!stationId)throw new Error('ไม่พบสถานีอ้างอิงของแถว '+row.sourceRow);
     return '<tr'+(stationId===project.selectedStationId?' class="selected-station"':'')+'><td><button type="button" class="text-button station-link" data-station-id="'+escape(stationId)+'" aria-label="เลือกสถานี '+station(row.station)+' ช่วง '+escape(row.reach)+'">'+row.reach+' / '+station(row.station)+'</button></td><td class="num">'+format(row.effectiveLength)+'</td><td class="num">'+format(m.value,4)+'<small>'+unit(m.inputUnit)+(m.depthMultiplier?' × '+m.depthMultiplier+' ม.':'')+'</small></td><td class="num">'+format(m.cachedProduct,4)+'</td><td class="num">'+format(m.contribution,4)+'</td><td class="num">'+format(delta,4)+'</td><td><code>'+m.valueCell+' × '+row.lengthCell+(m.multiplierCell?' × '+m.multiplierCell:'')+'</code><small>ผลเดิม '+m.productCell+'</small></td><td><span class="status '+(m.value===null||m.cachedProduct===null?'amber':'')+'">'+statusText(m)+'</span></td></tr>';
   }).join('');
 }

@@ -68,6 +68,12 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
   await check('S6006 audits 41 source stations and preserves missing-input versus missing-product distinctions', async () => {
     await panel(page, 'quantities');
     assert.equal(await page.locator('#station-table tbody tr').count(), 41);
+    assert.equal(await page.locator('#station-table .selected-station').count(),1,'Active BOQ source row is linked to the project catalog');
+    await page.locator('#station-table [data-station-id]').nth(1).click();
+    assert.equal(await page.locator('#station-select').inputValue(),'r1-row15','Clicking a source-table station selects its scenario');
+    assert.match(await page.locator('#station-context').innerText(),/แถว 15/);
+    await page.locator('#station-table [data-station-id]').first().click();
+    assert.equal(await page.locator('#station-select').inputValue(),'r1-row14');
     assert.match(await page.locator('#source-coverage').innerText(), /41 แถว.*1,000 ม\./);
     assert.equal(await page.locator('#measure-select').inputValue(), 'riprap_facing');
     const first = page.locator('#station-table tbody tr').first().locator('td');
@@ -349,6 +355,10 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await page.locator('#previous-station').click();
     await panel(page,'overview');
     assert.match(await page.locator('#typical-drawing').innerText(),/น้ำสูง 99\.50 \(บริบทผู้ใช้\)/);
+    const labelBounds=await page.locator('#typical-drawing [data-annotation="walkway"]').evaluate(el=>{
+      const b=el.getBBox(),v=el.ownerSVGElement.viewBox.baseVal;return {left:b.x,right:b.x+b.width,top:b.y,bottom:b.y+b.height,width:v.width,height:v.height};
+    });
+    assert.ok(labelBounds.left>=0&&labelBounds.right<=labelBounds.width&&labelBounds.top>=0&&labelBounds.bottom<=labelBounds.height,'Walkway annotation must not be clipped by the section viewBox');
     assert.equal(await page.locator('#typical-drawing [data-water-key="groundwater"]').count(),1);
     assert.match(await page.locator('#external-analysis-status').innerText(),/ต้องวิเคราะห์เสถียรภาพรวมใหม่/);
     await assertNoOverflow(page,'S6006 unified project desktop');

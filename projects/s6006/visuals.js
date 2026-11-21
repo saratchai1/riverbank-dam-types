@@ -84,7 +84,9 @@ export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = 
   const topDimY = Y(p.crestLevel) - 29;
   dimH(-p.walkwayWidth, 0, topDimY, fmt(p.walkwayWidth));
   dimH(0, c.run, topDimY, `ระยะราบ ${fmt(c.run)} ม.`);
-  out.push(text(X(-p.walkwayWidth) - 7, Y(p.crestLevel) - 9, 'ทางเท้า: แสดงเฉพาะผิว', 'text-anchor="end" class="small"'));
+  // Keep the land-side annotation inside the SVG, including wider trial slopes.
+  out.push('<g data-annotation="walkway">', text(18, Y(p.crestLevel) + 12, 'ทางเท้า:', 'class="small"'),
+    text(18, Y(p.crestLevel) + 26, 'แสดงเฉพาะผิว', 'class="small"'), '</g>');
   out.push(text(X(0) + 8, Y(p.crestLevel) - 9, `สันเขื่อน ${signed(p.crestLevel)}`, 'class="small halo"'));
   // The vertical dimension is independent of water-label leaders.
   const heightX = X(loX) - 32;
