@@ -182,10 +182,15 @@ export function mountCaseScene(container, inputs) {
       model.traverse(o => { o.geometry?.dispose(); if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material?.dispose(); });
       labels.forEach(l => l.element.remove()); labels = []; model = null;
     }
-    function label(value, at, color = '#24434e') {
+    function label(value, at, placement = 'above', color = '#24434e') {
       const el = doc.createElement('div'); el.textContent = value;
       Object.assign(el.style, { position: 'absolute', top: '0', left: '0', color, font: '600 10px/1.5 Tahoma,sans-serif', padding: '3px 6px', borderRadius: '4px', background: '#fffffff0', border: '1px solid #dfe7e2', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: '2' });
-      root.append(el); labels.push({ element: el, point: at });
+      if (placement === 'below') {
+        const leader = doc.createElement('span');
+        Object.assign(leader.style, { position: 'absolute', left: '50%', top: '-13px', width: '1px', height: '12px', background: '#738c91' });
+        el.append(leader);
+      }
+      root.append(el); labels.push({ element: el, point: at, placement });
     }
     function renderLines(points, color = '#536b71', dash = false) {
       const mat = dash ? new THREE.LineDashedMaterial({ color, dashSize: .8, gapSize: .5, transparent: true, opacity: .8 }) : new THREE.LineBasicMaterial({ color, transparent: true, opacity: .75 });
@@ -222,7 +227,8 @@ export function mountCaseScene(container, inputs) {
       label(`สัน ${signed(g.p.crestLevel)} · ระดับสมมุติ`, local(g.a, frontZ));
       label(`ตีน ${signed(g.p.toeLevel)}`, local(g.b, frontZ));
       label('0 ม. สมมุติ', local(g.walk[0], -50));
-      label('100 ม. สมมุติ', local(g.walk[0], 50));
+      // Keep the near-end station below its exact anchor, clear of the crest label.
+      label('100 ม. สมมุติ', local(g.walk[0], 50), 'below');
       scene.add(model); box = new THREE.Box3().setFromObject(model);
       caption.textContent = `แนวตรงสมมุติ 100 ม. · ไม่ใช่แนวสำรวจ/UTM · ลาด ${fmt(g.p.slopeH, 1)}H:1V · หินหนาตั้งฉาก ${fmt(g.p.rockThickness)} ม. · ทรายแถบขั้นต่ำ/ตีนฐานราบสมมุติ · ทางเท้าแสดงเฉพาะผิว`;
       if (first) { first = false; fit(view); }
@@ -263,10 +269,10 @@ export function mountCaseScene(container, inputs) {
       if (redraw || changed) {
         renderer.render(scene, camera);
         const w = root.clientWidth, h = root.clientHeight;
-        labels.forEach(({ element, point }) => {
+        labels.forEach(({ element, point, placement }) => {
           const q = point.clone().project(camera);
           element.style.display = q.z > 1 || q.z < -1 || Math.abs(q.x) > 1.1 || Math.abs(q.y) > 1.1 ? 'none' : '';
-          element.style.transform = `translate(${(q.x + 1) / 2 * w}px,${(1 - q.y) / 2 * h}px) translate(-50%,-135%)`;
+          element.style.transform = `translate(${(q.x + 1) / 2 * w}px,${(1 - q.y) / 2 * h}px) translate(-50%,${placement === 'below' ? '12px' : '-135%'})`;
         });
         redraw = false;
       }

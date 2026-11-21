@@ -285,6 +285,23 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await screenshot(p, 's6006-overview-mobile.png');
     for (const name of ['model', 'quantities', 'engineering', 'basis', 'knowledge']) {
       await panel(p, name); await assertNoOverflow(p, `S6006 ${name} mobile`);
+      if (name === 'model' || name === 'engineering') {
+        const bounds = await p.locator(`#panel-${name} form input, #panel-${name} form select`).evaluateAll(elements =>
+          elements.map(el => {
+            const r = el.getBoundingClientRect(), card = el.closest('.card').getBoundingClientRect();
+            return { name: el.name, left: r.left, right: r.right, width: r.width, cardLeft: card.left, cardRight: card.right, viewport: window.innerWidth };
+          }));
+        assert.ok(bounds.length > 0);
+        for (const b of bounds) {
+          assert.ok(b.left >= Math.max(0, b.cardLeft) - 1 && b.right <= Math.min(b.viewport, b.cardRight) + 1,
+            `${name} input ${b.name} must not be clipped by its card or the mobile viewport: ${JSON.stringify(b)}`);
+          assert.ok(b.width >= 80, `${name} input ${b.name} stays usable`);
+        }
+      }
+      if (name === 'engineering') {
+        await p.locator('#beam-form').evaluate(el => el.scrollIntoView({ block: 'start' }));
+        await screenshot(p, 's6006-engineering-mobile.png', false);
+      }
     }
     await panel(p, 'model');
     await changeValue(p, '#geometry-form [name="rockThickness"]', .6);
