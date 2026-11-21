@@ -139,7 +139,7 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     savedCase = await download(page, '#save-case', 's6006-edited-case.json');
     const saved = JSON.parse(await readFile(savedCase, 'utf8'));
     assert.equal(saved.schema, 'riverbank.s6006.project');
-    assert.equal(saved.version, 1); assert.equal(saved.projectCode, 'S6006');
+    assert.equal(saved.version, 2); assert.equal(saved.projectCode, 'S6006');
     assert.equal(getActiveScenario(saved).geometry.slopeH, 2); assert.equal(getActiveScenario(saved).geometry.length, 500);
     assert.equal(getSoilInputs(getActiveScenario(saved)).slopeH,2);
     assert.equal(Object.hasOwn(getActiveScenario(saved).soilInputs,'slopeH'),false,'Slope has one stored owner');

@@ -1,0 +1,57 @@
+.comparison-page h1{font-size:26px;line-height:1.45;margin:8px 0 15px}
+.comparison-page h2{font-size:19px}
+.comparison-page .comparison-intro{font-size:10px;line-height:1.75;margin:7px 0 12px}
+.comparison-page .comparison-identity th{width:27%}
+.comparison-page .comparison-identity th,.comparison-page .comparison-identity td{padding:5px 7px}
+.comparison-page .entry-register{table-layout:fixed}
+.comparison-page .entry-register th:first-child{width:10%}
+.comparison-page .entry-register th:nth-child(2){width:37%}
+.comparison-page .entry-register th:nth-child(3){width:33%}
+.comparison-page .entry-register th:nth-child(4){width:20%}
+.comparison-page .entry-register td{overflow-wrap:anywhere}
+.comparison-page .entry-name{font-size:10px;font-weight:600;white-space:normal}
+.comparison-page .comparison-reference{display:inline-block;padding:1px 5px;margin-top:3px;border:1px solid #b4bcb2;border-radius:3px;font-size:8px;font-weight:500;color:#4a584f;background:#f2f3ef}
+.comparison-page .comparison-grid{table-layout:fixed;font-size:9px;line-height:1.6}
+.comparison-page .comparison-grid th,.comparison-page .comparison-grid td{padding:6px 7px;overflow-wrap:anywhere}
+.comparison-page .comparison-grid th{vertical-align:top}
+.comparison-page .comparison-grid .metric-label{font-size:9px;font-weight:500}
+.comparison-page .comparison-grid .metric-unit{font-size:8px;color:#687865;font-weight:400}
+.comparison-page .comparison-grid .metric-value{display:block;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.comparison-page .comparison-grid .metric-state,.comparison-page .comparison-grid .metric-delta,.comparison-page .comparison-grid .metric-reason{display:block;font-size:8px;line-height:1.65;margin-top:2px;color:#697461}
+.comparison-page .comparison-grid .metric-reason{color:#776745}
+.comparison-page .comparison-grid .input-changed{background:#f8f6ee}
+.comparison-page .comparison-grid .change-label{display:block;font-size:8px;font-weight:400;color:#776745;margin-top:3px}
+.comparison-page .comparison-grid code{font-size:7.5px}
+.comparison-page .comparison-key{font-size:10px;font-weight:600}
+.comparison-page .comparison-key small{font-size:8px;font-weight:400;display:block;margin-top:2px}
+.comparison-page .comparison-scope{font-size:10px;line-height:1.8;padding:10px 12px;background:#f5f4eb;border:1px solid #dddccf;border-radius:5px;margin:12px 0}
+.comparison-page .reason-list{margin:10px 0;padding:0}
+.comparison-page .reason-list dt{font-size:10px;font-weight:600;margin:11px 0 3px}
+.comparison-page .reason-list dd{font-size:10px;line-height:1.8;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.comparison-page .context-detail{font-size:10.5px;line-height:1.85;margin:12px 0;tab-size:2}
+.comparison-page .source-table{table-layout:fixed}
+.comparison-page .source-table th:first-child{width:29%}
+.comparison-page .source-table td{font-size:9px;padding:6px 7px}
+.comparison-page .running-foot{grid-template-columns:minmax(0,1fr) 125px}
+.comparison-page .foot-context{overflow-wrap:anywhere}
+@media screen and (max-width:820px){
+  .comparison-page h1{font-size:24px}
+  .comparison-page .comparison-grid{min-width:610px}
+  .comparison-page .comparison-table-wrap{overflow-x:auto;max-width:100%;margin:10px 0 13px}
+  .comparison-page .comparison-table-wrap table{display:table;margin:0}
+  .comparison-page .entry-register{display:table;font-size:8px}
+  .comparison-page .entry-register th,.comparison-page .entry-register td{padding:5px 4px}
+  .comparison-page .entry-register th:nth-child(2){width:33%}
+  .comparison-page .entry-register th:nth-child(3){width:37%}
+  .comparison-page .entry-register .entry-name{font-size:9px}
+  .comparison-page .entry-register code{font-size:7px}
+  .comparison-page .running-foot{grid-template-columns:minmax(0,1fr) 90px}
+}
+@media print{
+  .comparison-page .comparison-table-wrap{overflow:visible}
+  .comparison-page .comparison-grid{width:100%;min-width:0}
+  .comparison-page h1{font-size:25px}
+  .comparison-page .context-detail{break-inside:avoid}
+  body[data-report-state="blocked"] #comparison-report-ready,
+  body[data-report-state="loading"] #comparison-report-ready{display:none}
+}

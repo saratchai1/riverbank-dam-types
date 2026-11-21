@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { runS6006Checks } from './s6006-browser.mjs';
+import { runS6006ComparisonChecks } from './s6006-comparison-browser.mjs';
 
 // Normal end-to-end tests run in CI with Playwright's installed Chromium.
 // Studio fixtures are synthetic. S6006 uses the reviewed derived numeric dataset; raw uploaded source files and tutorial images are not served.
@@ -353,6 +354,7 @@ try {
     await reference.context.close();
   }
   await runS6006Checks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
+  await runS6006ComparisonChecks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';

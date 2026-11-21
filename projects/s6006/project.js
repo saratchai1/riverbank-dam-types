@@ -4,19 +4,23 @@ import { DEFAULT_BEAM_INPUTS, DEFAULT_SOIL_INPUTS, calculateBeam, calculateSoil 
 // A BOQ station is a source-row context, not a reconstructed survey profile.
 // Calculated results are deliberately absent from the persisted project model.
 export const PROJECT_SCHEMA = 'riverbank.s6006.project';
-export const PROJECT_VERSION = 1;
+export const PROJECT_VERSION = 2;
 export const CALCULATION_REVISION = 'S6006-R2';
 export const PROJECT_MAX_BYTES = 1024 * 1024;
+export const MAX_STATION_ALTERNATIVES = 3;
+export const ALTERNATIVE_NAME_MAX_LENGTH = 48;
 export const DEFAULT_CONTEXT = Object.freeze({
   waterHighLevel: null, waterLowLevel: null, groundwaterLevel: null,
   boreholeReference: '', waterReference: '', sourceNote: '',
 });
 
 const RESERVED = new Set(['__proto__', 'prototype', 'constructor']);
-const PROJECT_KEYS = ['schema', 'version', 'calculationRevision', 'projectCode', 'selectedStationId', 'stationScenarios'];
+const PROJECT_V1_KEYS = ['schema', 'version', 'calculationRevision', 'projectCode', 'selectedStationId', 'stationScenarios'];
+const PROJECT_V2_KEYS = [...PROJECT_V1_KEYS, 'stationComparisons'];
 const SCENARIO_KEYS = ['geometry', 'beamInputs', 'soilInputs', 'context'];
 const SOIL_KEYS = Object.keys(DEFAULT_SOIL_INPUTS).filter(key => key !== 'slopeH');
 const STATION_ID = /^r[1-9]\d*-row[1-9]\d*$/;
+const ALTERNATIVE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const finite = value => typeof value === 'number' && Number.isFinite(value);
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -59,6 +63,15 @@ function exactKeys(object, keys, label) {
   const expected = new Set(keys);
   for (const key of Object.keys(object)) if (!expected.has(key)) throw new TypeError(`${label}: ไม่รองรับข้อมูล ${key}`);
   for (const key of keys) if (!own(object, key)) throw new TypeError(`${label}: ไม่มีข้อมูล ${key}`);
+}
+
+function assertProjectHeader(project) {
+  if (!plain(project)) throw new TypeError('project ต้องเป็น object ปกติ');
+  exactKeys(project, project.version === 2 ? PROJECT_V2_KEYS : PROJECT_V1_KEYS, 'project');
+  if (project.schema !== PROJECT_SCHEMA || ![1, 2].includes(project.version)
+    || project.calculationRevision !== CALCULATION_REVISION || project.projectCode !== 'S6006') {
+    throw new TypeError('รูปแบบ รุ่นโครงการ หรือรุ่นการคำนวณไม่ตรงกับ S6006 ที่รองรับ');
+  }
 }
 
 function stable(value) {
@@ -111,7 +124,7 @@ export function createProject(source) {
   const [first] = stationCatalog(source);
   return {
     schema: PROJECT_SCHEMA, version: PROJECT_VERSION, calculationRevision: CALCULATION_REVISION,
-    projectCode: 'S6006', selectedStationId: first.id, stationScenarios: {},
+    projectCode: 'S6006', selectedStationId: first.id, stationScenarios: {}, stationComparisons: {},
   };
 }
 
@@ -152,6 +165,67 @@ function validateScenario(scenario) {
   return { missingSu };
 }
 
+function validateAlternativeId(id) {
+  // "current" is the comparison adapter's working-scenario entry, never a saved ID.
+  if (typeof id !== 'string' || id !== id.trim() || !ALTERNATIVE_ID.test(id) || RESERVED.has(id) || id === 'current') {
+    throw new TypeError('รหัสทางเลือกต้องเป็นตัวอักษรหรือตัวเลข ตามด้วยตัวอักษร ตัวเลข _ หรือ - ไม่เกิน 80 ตัว และไม่ใช้ชื่อสงวน');
+  }
+}
+
+function normalizedAlternativeName(name) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > ALTERNATIVE_NAME_MAX_LENGTH) {
+    throw new TypeError(`ชื่อทางเลือกต้องเป็นข้อความที่ไม่ว่างและไม่เกิน ${ALTERNATIVE_NAME_MAX_LENGTH} ตัวอักษร`);
+  }
+  return name.trim();
+}
+
+function validateAlternativeTimestamp(value) {
+  // Require an unambiguous UTC ISO timestamp and reject normalized invalid dates
+  // such as February 30; Date.parse alone would accept several non-timestamps.
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
+    throw new TypeError('เวลาบันทึกทางเลือกต้องเป็น UTC ISO timestamp');
+  }
+  const time = Date.parse(value), canonical = value.includes('.') ? value : value.replace(/Z$/, '.000Z');
+  if (!Number.isFinite(time) || new Date(time).toISOString() !== canonical) throw new TypeError('เวลาบันทึกทางเลือกไม่ถูกต้อง');
+}
+
+function validateStationComparison(comparison) {
+  exactKeys(comparison, ['referenceId', 'alternatives'], 'stationComparison');
+  const { alternatives, referenceId } = comparison;
+  if (!Array.isArray(alternatives) || alternatives.length > MAX_STATION_ALTERNATIVES
+    || Object.keys(alternatives).length !== alternatives.length
+    || Object.keys(alternatives).some((key, index) => key !== String(index))) {
+    throw new TypeError(`รายการทางเลือกต้องเป็น array ต่อเนื่อง ไม่เกิน ${MAX_STATION_ALTERNATIVES} รายการต่อสถานี`);
+  }
+  const ids = new Set();
+  for (const alternative of alternatives) {
+    exactKeys(alternative, ['id', 'name', 'createdAt', 'scenario'], 'alternative');
+    validateAlternativeId(alternative.id);
+    if (ids.has(alternative.id)) throw new TypeError('รหัสทางเลือกซ้ำในสถานีเดียวกัน');
+    ids.add(alternative.id);
+    if (alternative.name !== normalizedAlternativeName(alternative.name)) throw new TypeError('ชื่อทางเลือกต้องไม่มีช่องว่างที่หัวหรือท้าย');
+    validateAlternativeTimestamp(alternative.createdAt);
+    validateScenario(alternative.scenario);
+  }
+  if ((!alternatives.length && referenceId !== null) || (alternatives.length && !ids.has(referenceId))) {
+    throw new TypeError('ทางเลือกอ้างอิงต้องอยู่ในรายการของสถานี หรือเป็น null เมื่อยังไม่มีทางเลือก');
+  }
+}
+
+/** Saved scenarios are independent copies; callers cannot modify them through this getter. */
+export function getStationComparison(project, stationId) {
+  assertPlainData(project);
+  assertProjectHeader(project);
+  const id = stationId === undefined ? project.selectedStationId : stationId;
+  if (typeof id !== 'string' || !STATION_ID.test(id)) throw new TypeError('รหัสบริบทสถานีไม่ถูกต้อง');
+  if (project.version === 1) return { referenceId: null, alternatives: [] };
+  if (!plain(project.stationComparisons)) throw new TypeError('stationComparisons ต้องเป็น object ของสถานี');
+  const comparison = own(project.stationComparisons, id)
+    ? project.stationComparisons[id] : { referenceId: null, alternatives: [] };
+  validateStationComparison(comparison);
+  return clone(comparison);
+}
+
 export function getScenario(project, stationId) {
   assertPlainData(project);
   if (!plain(project.stationScenarios) || typeof stationId !== 'string' || !STATION_ID.test(stationId)) throw new TypeError('รหัสบริบทสถานีไม่ถูกต้อง');
@@ -181,15 +255,27 @@ function canonicalProject(project) {
     const scenario = project.stationScenarios[id];
     if (!isBaselineScenario(scenario)) stationScenarios[id] = clone(scenario);
   }
-  return {
+  const canonical = {
     schema: project.schema, version: project.version, calculationRevision: project.calculationRevision,
     projectCode: project.projectCode, selectedStationId: project.selectedStationId, stationScenarios,
   };
+  // Native v1 records retain their exact old shape and hash. This is essential
+  // for immutable report snapshots already issued before alternatives existed.
+  if (project.version === 2) {
+    if (!plain(project.stationComparisons)) throw new TypeError('stationComparisons ต้องเป็น object ของสถานี');
+    canonical.stationComparisons = {};
+    for (const id of Object.keys(project.stationComparisons).sort()) {
+      const comparison = project.stationComparisons[id];
+      validateStationComparison(comparison);
+      if (comparison.alternatives.length) canonical.stationComparisons[id] = clone(comparison);
+    }
+  }
+  return canonical;
 }
 
 export function projectRevision(project) {
   assertPlainData(project);
-  exactKeys(project, PROJECT_KEYS, 'project');
+  assertProjectHeader(project);
   const { selectedStationId, ...content } = canonicalProject(project);
   return fingerprint(stable(content), 's6006p-');
 }
@@ -198,17 +284,20 @@ export function validateProject(project, source) {
   const errors = [], warnings = [];
   try {
     assertPlainData(project);
-    exactKeys(project, PROJECT_KEYS, 'project');
-    if (project.schema !== PROJECT_SCHEMA || project.version !== PROJECT_VERSION
-      || project.calculationRevision !== CALCULATION_REVISION || project.projectCode !== 'S6006') {
-      throw new TypeError('รูปแบบ รุ่นโครงการ หรือรุ่นการคำนวณไม่ตรงกับ S6006 ที่รองรับ');
-    }
+    assertProjectHeader(project);
     const catalog = stationCatalog(source), ids = new Set(catalog.map(row => row.id));
     if (typeof project.selectedStationId !== 'string' || !ids.has(project.selectedStationId)) throw new RangeError('สถานีที่เลือกไม่มีในทะเบียน BOQ ต้นฉบับ');
     if (!plain(project.stationScenarios)) throw new TypeError('stationScenarios ต้องเป็น object ของสถานี');
     for (const [id, scenario] of Object.entries(project.stationScenarios)) {
       if (!ids.has(id)) throw new RangeError(`ไม่พบรหัสสถานี ${id} ในทะเบียน BOQ ต้นฉบับ`);
       try { validateScenario(scenario); } catch (error) { errors.push(`${id}: ${error.message}`); }
+    }
+    if (project.version === 2) {
+      if (!plain(project.stationComparisons)) throw new TypeError('stationComparisons ต้องเป็น object ของสถานี');
+      for (const [id, comparison] of Object.entries(project.stationComparisons)) {
+        if (!ids.has(id)) throw new RangeError(`ไม่พบรหัสสถานี ${id} ในทะเบียน BOQ ต้นฉบับ`);
+        try { validateStationComparison(comparison); } catch (error) { errors.push(`${id}: ${error.message}`); }
+      }
     }
     if (!errors.length) {
       const active = getActiveScenario(project);
@@ -248,6 +337,72 @@ export function selectStation(project, stationId, source) {
   const updated = { ...clone(project), selectedStationId: stationId };
   requireProject(updated, source);
   return updated;
+}
+
+/** Capture accepted inputs only; first capture upgrades v1 without changing its source object. */
+export function saveAlternative(project, name, source, options = {}) {
+  requireProject(project, source);
+  assertPlainData(options);
+  if (!plain(options) || Object.keys(options).some(key => !['id', 'createdAt'].includes(key))) {
+    throw new TypeError('ตัวเลือกการบันทึกทางเลือกรองรับเฉพาะ id และ createdAt');
+  }
+  const normalizedName = normalizedAlternativeName(name);
+  const comparison = getStationComparison(project);
+  if (comparison.alternatives.length >= MAX_STATION_ALTERNATIVES) {
+    throw new RangeError(`บันทึกได้ไม่เกิน ${MAX_STATION_ALTERNATIVES} ทางเลือกต่อสถานี กรุณาลบทางเลือกเดิมก่อน`);
+  }
+  const id = own(options, 'id') ? options.id : globalThis.crypto.randomUUID();
+  const createdAt = own(options, 'createdAt') ? options.createdAt : new Date().toISOString();
+  validateAlternativeId(id);
+  validateAlternativeTimestamp(createdAt);
+  if (comparison.alternatives.some(alternative => alternative.id === id)) throw new RangeError('มีทางเลือกรหัสนี้ในสถานีแล้ว');
+  comparison.alternatives.push({ id, name: normalizedName, createdAt, scenario: getActiveScenario(project) });
+  if (comparison.referenceId === null) comparison.referenceId = id;
+  const updated = clone(project);
+  if (updated.version === 1) {
+    updated.version = PROJECT_VERSION;
+    updated.stationComparisons = {};
+  }
+  updated.stationComparisons[updated.selectedStationId] = comparison;
+  requireProject(updated, source);
+  return updated;
+}
+
+function selectedAlternative(project, id) {
+  validateAlternativeId(id);
+  const comparison = getStationComparison(project);
+  const alternative = comparison.alternatives.find(item => item.id === id);
+  if (!alternative) throw new RangeError('ไม่พบทางเลือกนี้ในสถานีที่เลือก');
+  return { comparison, alternative };
+}
+
+export function removeAlternative(project, id, source) {
+  requireProject(project, source);
+  const { comparison } = selectedAlternative(project, id);
+  comparison.alternatives = comparison.alternatives.filter(alternative => alternative.id !== id);
+  if (comparison.referenceId === id) comparison.referenceId = comparison.alternatives[0]?.id ?? null;
+  const updated = clone(project);
+  if (comparison.alternatives.length) updated.stationComparisons[updated.selectedStationId] = comparison;
+  else delete updated.stationComparisons[updated.selectedStationId];
+  requireProject(updated, source);
+  return updated;
+}
+
+export function setComparisonReference(project, id, source) {
+  requireProject(project, source);
+  const { comparison } = selectedAlternative(project, id);
+  comparison.referenceId = id;
+  const updated = clone(project);
+  updated.stationComparisons[updated.selectedStationId] = comparison;
+  requireProject(updated, source);
+  return updated;
+}
+
+/** Apply a copy to the selected working scenario; the saved alternative remains unchanged. */
+export function applyAlternative(project, id, source) {
+  requireProject(project, source);
+  const { alternative } = selectedAlternative(project, id);
+  return updateActiveScenario(project, alternative.scenario, source);
 }
 
 export function serializeProject(project, source) {
