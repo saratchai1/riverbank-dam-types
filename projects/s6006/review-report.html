@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>S6006 · รายงานทะเบียนตรวจงานวิศวกรรม</title>
+  <link rel="stylesheet" href="report.css">
+  <link rel="stylesheet" href="review-report.css">
+</head>
+<body data-report-state="loading">
+  <nav class="report-toolbar" aria-label="รายงานตรวจงาน S6006">
+    <a href="index.html">← เปิดโครงการ</a>
+    <span id="review-report-status" role="status">S6006 / กำลังตรวจสำเนาทะเบียนตรวจงาน</span>
+    <button id="print-review-report" type="button" disabled>พิมพ์ / บันทึก PDF</button>
+  </nav>
+  <section id="review-report-error" class="report-error" role="alert" hidden></section>
+  <main id="review-report-ready" data-ready="false" aria-busy="true">
+    <p class="report-loading">กำลังอ่านข้อมูลและขอบเขตจาก snapshot ที่ร้องขอ…</p>
+  </main>
+  <noscript><p class="report-error">ต้องเปิด JavaScript เพื่อตรวจ snapshot ของรายงานก่อนพิมพ์</p></noscript>
+  <script type="module" src="review-report.js"></script>
+</body>
+</html>

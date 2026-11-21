@@ -7,6 +7,8 @@ import { saveWorkingProject, loadWorkingProject, saveReportSnapshot } from './pr
 import { mountComparison } from './comparison-ui.js';
 import { getStationComparison } from './project.js';
 import { saveComparisonSnapshot } from './comparison-storage.js';
+import { mountReview } from './review-ui.js';
+import { saveReviewSnapshot } from './review-storage.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -14,7 +16,7 @@ const format = (value, digits=3) => value === null || value === undefined ? '—
 const unit = value => ({m:'ม.',m2:'ตร.ม.',m3:'ลบ.ม.',degree:'องศา'}[value] || value);
 const station = value => Math.floor(value/1000)+'+'+String(value%1000).padStart(3,'0');
 let inputs = {...DEFAULT_INPUTS};
-let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView;
+let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView, reviewView;
 const activeScenario = () => getActiveScenario(project);
 const fields = [
   ['length','ความยาวขยายรูปตัดทฤษฎี','ม. ไม่ใช่ช่วงสถานี',1000],['crestLevel','ระดับสันเขื่อน','ระดับสมมติ',101],['toeLevel','ระดับตีนเขื่อน','ระดับสมมติ',88],['slopeH','ลาดหน้าหิน','H : 1 V · ใช้ร่วมกับดิน',2.5],['rockThickness','ความหนาหินเรียง','ม. ตั้งฉากลาด',.5],['sandMinThickness','ชั้นทรายขั้นต่ำจำลอง','ม. ตั้งฉากลาด',1],['walkwayWidth','ความกว้างทางเท้า','ม.',2.95],['toeTopWidth','สันตีนหินจำลอง','ม.',1.5],['toeDepth','ความลึกตีนหินจำลอง','ม. ฐานราบสมมติ',2],['toeSlopeH','ลาดข้างตีนหิน','H : 1 V',1.5],
@@ -78,7 +80,7 @@ function renderProjectContext(){
 }
 function applyProject(next,{persist=true}={}){
   project=next;inputs=activeScenario().geometry;
-  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();renderStations();
+  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();reviewView?.render();renderStations();
   if(persist)persistProject();
 }
 function saveProject(){
@@ -92,7 +94,40 @@ function changeStation(id){
 }
 function setProjectControlsEnabled(enabled){
   for(const control of document.querySelectorAll('button,input,select,textarea'))control.disabled=!enabled;
-  if(enabled){renderProjectContext();comparisonView?.render();}
+  if(enabled){renderProjectContext();comparisonView?.render();reviewView?.render();}
+}
+function navigateReview({stationId,scenarioId,target}){
+  try{
+    if(!catalog.some(row=>row.id===stationId))throw new Error('ไม่พบสถานีที่ต้องการตรวจ');
+    const saved=scenarioId==='current'?null:getStationComparison(project,stationId).alternatives.find(item=>item.id===scenarioId);
+    if(scenarioId!=='current'&&!saved)throw new Error('ไม่พบทางเลือกที่ต้องการตรวจ');
+    if(project.selectedStationId!==stationId)changeStation(stationId);
+    if(saved){
+      setPanel('comparison');
+      const card=Array.from(document.querySelectorAll('.alternative-card')).find(item=>item.dataset.alternativeId===scenarioId);
+      if(card){card.tabIndex=-1;card.focus({preventScroll:true});card.scrollIntoView({block:'center',behavior:'smooth'});}
+      notice('เปิดทางเลือก “'+saved.name+'” ในหน้าเปรียบเทียบแล้ว · ใช้ “นำมาแก้ต่อ” เมื่อต้องการคัดลอกชุดนี้เป็นค่าที่กำลังแก้');
+      return;
+    }
+    const destinations={beam:['engineering','beam-form'],soil:['engineering','soil-form'],model:['model','geometry-form'],context:['review','context-form'],basis:['basis',null]};
+    if(!target||!Object.hasOwn(destinations,target.section))throw new Error('ไม่พบจุดแก้ไขที่รองรับ');
+    const [panel,formId]=destinations[target.section];
+    setPanel(panel);
+    const form=formId?document.getElementById(formId):null;
+    if(target.section==='context')form.closest('details').open=true;
+    const control=form&&Array.from(form.elements).find(item=>item.name===target.field);
+    const destination=control||form||document.getElementById('panel-'+panel);
+    if(!control)destination.tabIndex=-1;
+    destination.focus({preventScroll:true});destination.scrollIntoView({block:'center',behavior:'smooth'});
+  }catch(error){notice('เปิดจุดตรวจไม่ได้: '+error.message,true);}
+}
+function openReviewReport(selection){
+  try{
+    const snapshot=saveReviewSnapshot(project,source,window.localStorage,selection);
+    window.open(snapshot.url,'_blank','noopener');
+    notice('เตรียมทะเบียนตรวจงานตามชุดที่เลือกแล้ว หากแท็บใหม่ไม่เปิด ให้กดลิงก์นี้: ');
+    const link=document.createElement('a');link.href=snapshot.url;link.target='_blank';link.rel='noopener';link.textContent='เปิดทะเบียนตรวจงานฉบับนี้ ↗';$('#notice').append(link);
+  }catch(error){notice('เปิดทะเบียนตรวจงานไม่ได้: '+error.message,true);}
 }
 function openComparisonReport(){
   try{
@@ -212,6 +247,10 @@ try{
     getProject:()=>project,getSource:()=>source,onProjectChange:applyProject,
     onNotice:notice,onDownload:download,onReport:openComparisonReport,
     onEdit:name=>{setPanel(name);$('#panel-'+name).scrollIntoView({block:'start',behavior:'smooth'});},
+  });
+  reviewView=mountReview($('#review-content'),{
+    getProject:()=>project,getSource:()=>source,onNotice:notice,onDownload:download,
+    onNavigate:navigateReview,onReport:openReviewReport,
   });
   applyProject(project,{persist:false});
   if(restoreError){notice('เปิดงานล่าสุดในเบราว์เซอร์ไม่ได้: '+restoreError+' ขณะนี้แสดงชุดเริ่มต้น กรุณาเปิดไฟล์โครงการที่บันทึกไว้',true);$('#persistence-status').textContent='งานล่าสุดยังไม่ได้โหลด · โปรดเปิดไฟล์โครงการ JSON';}
