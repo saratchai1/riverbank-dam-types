@@ -356,9 +356,12 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await panel(page,'overview');
     assert.match(await page.locator('#typical-drawing').innerText(),/น้ำสูง 99\.50 \(บริบทผู้ใช้\)/);
     const labelBounds=await page.locator('#typical-drawing [data-annotation="walkway"]').evaluate(el=>{
-      const b=el.getBBox(),v=el.ownerSVGElement.viewBox.baseVal;return {left:b.x,right:b.x+b.width,top:b.y,bottom:b.y+b.height,width:v.width,height:v.height};
+      const b=el.getBBox(),svg=el.ownerSVGElement,v=svg.viewBox.baseVal;
+      const geometryBottom=Math.max(...[...svg.querySelectorAll('[data-component]')].map(shape=>{const box=shape.getBBox();return box.y+box.height;}));
+      return {left:b.x,right:b.x+b.width,top:b.y,bottom:b.y+b.height,width:v.width,height:v.height,geometryBottom};
     });
     assert.ok(labelBounds.left>=0&&labelBounds.right<=labelBounds.width&&labelBounds.top>=0&&labelBounds.bottom<=labelBounds.height,'Walkway annotation must not be clipped by the section viewBox');
+    assert.ok(labelBounds.top>labelBounds.geometryBottom,'Walkway scope belongs below the plotted section, clear of elevation ticks and dimensions');
     assert.equal(await page.locator('#typical-drawing [data-water-key="groundwater"]').count(),1);
     assert.match(await page.locator('#external-analysis-status').innerText(),/ต้องวิเคราะห์เสถียรภาพรวมใหม่/);
     await assertNoOverflow(page,'S6006 unified project desktop');

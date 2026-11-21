@@ -84,9 +84,7 @@ export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = 
   const topDimY = Y(p.crestLevel) - 29;
   dimH(-p.walkwayWidth, 0, topDimY, fmt(p.walkwayWidth));
   dimH(0, c.run, topDimY, `ระยะราบ ${fmt(c.run)} ม.`);
-  // Keep the land-side annotation inside the SVG, including wider trial slopes.
-  out.push('<g data-annotation="walkway">', text(18, Y(p.crestLevel) + 12, 'ทางเท้า:', 'class="small"'),
-    text(18, Y(p.crestLevel) + 26, 'แสดงเฉพาะผิว', 'class="small"'), '</g>');
+  // Walkway scope is labeled in the legend, clear of elevation ticks and dimensions.
   out.push(text(X(0) + 8, Y(p.crestLevel) - 9, `สันเขื่อน ${signed(p.crestLevel)}`, 'class="small halo"'));
   // The vertical dimension is independent of water-label leaders.
   const heightX = X(loX) - 32;
@@ -120,10 +118,10 @@ export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = 
   out.push(text(toeDimX + 8, Y(p.toeLevel - p.toeDepth) + 6, `ลึก ${fmt(p.toeDepth)} ม.*`, 'class="small halo"'));
   out.push(text(X(c.run + p.toeTopWidth / 2), Y(p.toeLevel - p.toeDepth) + 20, `ลาดข้าง ${fmt(p.toeSlopeH, 1)}H : 1V · ฐานราบสมมุติ`, 'text-anchor="middle" class="small"'));
   const footerY = height - 67;
-  const legend = [[COLORS.rock, 'หินเรียง'], [COLORS.sand, 'ทรายขั้นต่ำ'], [COLORS.fabric, 'ใยสังเคราะห์'], [COLORS.walk, 'ผิวทางเท้า']];
+  const legend = [[COLORS.rock, 'หินเรียง'], [COLORS.sand, 'ทรายขั้นต่ำ'], [COLORS.fabric, 'ใยสังเคราะห์'], [COLORS.walk, 'ทางเท้า: แสดงเฉพาะผิว']];
   legend.forEach(([color, label], i) => {
     const lx = 20 + i * 133;
-    out.push(`<rect x="${lx}" y="${footerY - 10}" width="12" height="9" rx="2" fill="${color}"/>`, text(lx + 18, footerY - 1, label, 'class="small"'));
+    out.push(`<rect x="${lx}" y="${footerY - 10}" width="12" height="9" rx="2" fill="${color}"/>`, text(lx + 18, footerY - 1, label, 'class="small"'+(color === COLORS.walk ? ' data-annotation="walkway"' : '')));
   });
   out.push(text(20, height - 43, '* ทรายเป็นแถบขั้นต่ำสมมุติ; ตีนเขื่อนฐานราบสมมาตร H ขั้นต่ำในแบบ 2 ม. รูปจริงต้องใช้พื้นท้องน้ำแต่ละหน้าตัด', 'class="note"'));
   out.push(text(20, height - 25, 'ยังไม่หักส่วนซ้อนที่รอยต่อและปลายงาน · ไม่แสดงดินสำรวจ/ปริมาตรถมทั้งหมด · ไม่ใช่แบบก่อสร้าง', 'class="note"'));
