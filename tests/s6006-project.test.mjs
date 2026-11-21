@@ -294,7 +294,7 @@ test('import rejects unknown source station IDs and inactive corrupt scenarios',
 test('import does not trust serialized results, approval flags, or mismatched revisions', () => {
   const p = fresh();
   for (const changed of [
-    { ...p, version: 2 }, { ...p, calculationRevision: 'S6006-R1' }, { ...p, projectCode: 'OTHER' },
+    { ...p, version: 999 }, { ...p, calculationRevision: 'S6006-R1' }, { ...p, projectCode: 'OTHER' },
     { ...p, projectApproved: true }, { ...p, beamResults: { usablePhiMnKnM: 999 } },
     { ...p, stationScenarios: { [first]: { ...createDefaultScenario(), soilResults: {} } } },
   ]) assert.throws(() => parseProject(JSON.stringify(changed), source));

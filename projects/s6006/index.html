@@ -5,6 +5,7 @@
   <meta name="theme-color" content="#173e39"><title>S6006 บ้านแดนเมือง · Riverbank Studio</title>
   <meta name="description" content="โครงการสาธิตจากแบบจริง: รูปตัด ปริมาณ โครงสร้าง และดิน พร้อมที่มารายการคำนวณ">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="comparison-ui.css">
   <script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
 </head>
 <body>
@@ -21,6 +22,7 @@
     <p id="station-context" class="muted"></p>
     <div class="revision-line"><span>รุ่นโครงการ <code id="project-revision"></code></span><span>รุ่นสถานการณ์ <code id="scenario-revision"></code></span><span id="persistence-status" role="status"></span></div>
     <p id="external-analysis-status" class="engineering-note"></p>
+    <div class="workspace-comparison-shortcut"><button type="button" class="button" data-open-panel="comparison">เปรียบเทียบทางเลือก →</button><span id="alternative-count">เก็บ A / B / C เพื่อเทียบกับค่าที่กำลังแก้</span></div>
     <details class="context-details"><summary>บริบทน้ำ หลุมเจาะ และที่มาของสถานีนี้ <small id="context-status"></small></summary>
       <p class="muted">สถานีมาจากตาราง BOQ รูปตัดเริ่มต้นใช้ SD-02 เป็นรูปทรงทฤษฎี ยังไม่ได้ผูกกับผิวดินสำรวจหรือชั้นดินจริงของแต่ละสถานี</p>
       <form id="context-form" class="context-grid">
@@ -35,7 +37,7 @@
     </details>
   </section>
   <nav id="case-tabs" class="case-tabs" aria-label="ส่วนของโครงการ">
-    <button data-panel="overview" aria-current="page"><span>01</span> ภาพโครงการ</button><button data-panel="model"><span>02</span> ลองปรับหน้าตัด</button><button data-panel="quantities"><span>03</span> ตรวจปริมาณ</button><button data-panel="engineering"><span>04</span> โครงสร้างและดิน</button><button data-panel="basis"><span>05</span> ที่มาวิศวกรรม</button><button data-panel="knowledge"><span>06</span> รีวิวชุดแบบ</button>
+    <button data-panel="overview" aria-current="page"><span>01</span> ภาพโครงการ</button><button data-panel="model"><span>02</span> ลองปรับหน้าตัด</button><button data-panel="quantities"><span>03</span> ตรวจปริมาณ</button><button data-panel="engineering"><span>04</span> โครงสร้างและดิน</button><button data-panel="basis"><span>05</span> ที่มาวิศวกรรม</button><button data-panel="knowledge"><span>06</span> รีวิวชุดแบบ</button><button data-panel="comparison"><span>07</span> เทียบทางเลือก</button>
   </nav>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <section id="panel-overview" class="panel">
@@ -49,7 +51,8 @@
   <section id="panel-engineering" class="panel" hidden><div class="section-title"><div><p class="eyebrow">STRUCTURE & GEOTECHNICS</p><h2>คำนวณกำลังโครงสร้างและด้านดิน</h2><p>แสดงข้อมูลตั้งต้น สูตร การแทนค่า และขอบเขตการตีความของผลแต่ละรายการ</p></div></div><div id="engineering-content"></div></section>
   <section id="panel-basis" class="panel" hidden><div id="basis-content"></div></section>
   <section id="panel-knowledge" class="panel" hidden><div id="knowledge-content"></div></section>
-  <footer class="page-footer"><span>S6006 / Unified project 1 · สมการ R2 · ข้อมูลและสมมติฐานมีผลต่อคำตอบ</span><a href="../../studio.html">กลับ Studio</a><a href="../../index.html">คลังแบบ 5 ชนิด</a><button type="button" class="text-button" data-current-report>เปิดรายการคำนวณฉบับเต็ม ↗</button></footer>
+  <section id="panel-comparison" class="panel" hidden><div id="comparison-content"></div></section>
+  <footer class="page-footer"><span>S6006 / Project alternatives 2 · สมการ R2 · ข้อมูลและสมมติฐานมีผลต่อคำตอบ</span><a href="../../studio.html">กลับ Studio</a><a href="../../index.html">คลังแบบ 5 ชนิด</a><button type="button" class="text-button" data-current-report>เปิดรายการคำนวณฉบับเต็ม ↗</button></footer>
 </main>
 <input id="case-file" type="file" accept=".json,application/json" hidden>
 <script type="module" src="app.js"></script>

@@ -6,7 +6,7 @@
   "description": "Five-type riverbank reference viewer and a survey-to-quantity design workspace",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check app.js && node --check studio/app.js && node --check studio/core.js && node --check studio/scene.js && node --check studio/drawings.js && node --check studio/exports.js && node --check projects/s6006/app.js && node --check projects/s6006/engine.js && node --check projects/s6006/project.js && node --check projects/s6006/project-storage.js && node --check projects/s6006/engineering.js && node --check projects/s6006/engineering-ui.js && node --check projects/s6006/report.js && node --check projects/s6006/visuals.js",
+    "check": "node --check app.js && node --check studio/app.js && node --check studio/core.js && node --check studio/scene.js && node --check studio/drawings.js && node --check studio/exports.js && node --check projects/s6006/app.js && node --check projects/s6006/engine.js && node --check projects/s6006/project.js && node --check projects/s6006/project-storage.js && node --check projects/s6006/engineering.js && node --check projects/s6006/engineering-ui.js && node --check projects/s6006/report.js && node --check projects/s6006/visuals.js && node --check projects/s6006/comparison.js && node --check projects/s6006/comparison-ui.js && node --check projects/s6006/comparison-storage.js && node --check projects/s6006/comparison-report.js",
     "test:browser": "node tests/browser-smoke.mjs",
     "start": "python3 -m http.server 8766"
   },

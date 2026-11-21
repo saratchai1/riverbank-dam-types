@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>S6006 · รายงานเปรียบเทียบทางเลือก</title>
+  <link rel="stylesheet" href="report.css">
+  <link rel="stylesheet" href="comparison-report.css">
+</head>
+<body data-report-state="loading">
+  <nav class="report-toolbar" aria-label="รายงานเปรียบเทียบ S6006">
+    <a href="index.html">← เปิดโครงการ</a>
+    <span id="comparison-report-status" role="status">S6006 / กำลังตรวจสำเนารายงานเปรียบเทียบ</span>
+    <button id="print-comparison-report" type="button" disabled>พิมพ์ / บันทึก PDF</button>
+  </nav>
+  <section id="comparison-report-error" class="report-error" role="alert" hidden></section>
+  <main id="comparison-report-ready" data-ready="false" aria-busy="true">
+    <p class="report-loading">กำลังอ่านทางเลือกและค่าปัจจุบันจาก snapshot ที่ร้องขอ…</p>
+  </main>
+  <noscript><p class="report-error">ต้องเปิด JavaScript เพื่อตรวจ snapshot ของรายงานเปรียบเทียบก่อนพิมพ์</p></noscript>
+  <script type="module" src="comparison-report.js"></script>
+</body>
+</html>

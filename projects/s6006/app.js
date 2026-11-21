@@ -4,6 +4,9 @@ import { SOURCE_FILES, sourceURL, REPORTED_FS, SOIL_SOURCE, CASE_REVIEWS, QUESTI
 import { mountEngineering } from './engineering-ui.js';
 import { PROJECT_MAX_BYTES, createProject, getActiveScenario, stationCatalog, projectRevision, scenarioRevision, isBaselineScenario, updateActiveScenario, selectStation, parseProject, serializeProject } from './project.js';
 import { saveWorkingProject, loadWorkingProject, saveReportSnapshot } from './project-storage.js';
+import { mountComparison } from './comparison-ui.js';
+import { getStationComparison } from './project.js';
+import { saveComparisonSnapshot } from './comparison-storage.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -11,7 +14,7 @@ const format = (value, digits=3) => value === null || value === undefined ? '—
 const unit = value => ({m:'ม.',m2:'ตร.ม.',m3:'ลบ.ม.',degree:'องศา'}[value] || value);
 const station = value => Math.floor(value/1000)+'+'+String(value%1000).padStart(3,'0');
 let inputs = {...DEFAULT_INPUTS};
-let source, audit, normalized, scene, project, catalog, engineeringView;
+let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView;
 const activeScenario = () => getActiveScenario(project);
 const fields = [
   ['length','ความยาวขยายรูปตัดทฤษฎี','ม. ไม่ใช่ช่วงสถานี',1000],['crestLevel','ระดับสันเขื่อน','ระดับสมมติ',101],['toeLevel','ระดับตีนเขื่อน','ระดับสมมติ',88],['slopeH','ลาดหน้าหิน','H : 1 V · ใช้ร่วมกับดิน',2.5],['rockThickness','ความหนาหินเรียง','ม. ตั้งฉากลาด',.5],['sandMinThickness','ชั้นทรายขั้นต่ำจำลอง','ม. ตั้งฉากลาด',1],['walkwayWidth','ความกว้างทางเท้า','ม.',2.95],['toeTopWidth','สันตีนหินจำลอง','ม.',1.5],['toeDepth','ความลึกตีนหินจำลอง','ม. ฐานราบสมมติ',2],['toeSlopeH','ลาดข้างตีนหิน','H : 1 V',1.5],
@@ -61,6 +64,8 @@ function renderProjectContext(){
   $('#station-context').textContent=row.reach+' / STA '+station(row.station)+' · '+row.sourceSheet+' แถว '+row.sourceRow+' · ความยาวรับผิดชอบใน BOQ '+format(row.effectiveLength)+' ม.';
   $('#project-revision').textContent=projectRevision(project);
   $('#scenario-revision').textContent=scenarioRevision(scenario);
+  const alternativeCount=getStationComparison(project).alternatives.length;
+  $('#alternative-count').textContent=alternativeCount?'สถานีนี้เก็บไว้ '+alternativeCount+' ทางเลือก · แก้ต่อหรือเทียบผลได้':'เก็บ A / B / C เพื่อเทียบกับค่าที่กำลังแก้';
   $('#external-analysis-status').textContent=isBaselineScenario(scenario)?'รูปตัดและค่าทดลองเริ่มต้น · Slope/W เดิมเป็นหลักฐานภายนอก ยังไม่ยืนยันผลของสถานีนี้':'สถานการณ์มีการแก้ไข · ต้องวิเคราะห์เสถียรภาพรวมใหม่ก่อนใช้ผลกับแบบนี้';
   for(const field of $('#context-form').elements){if(field.name&&Object.hasOwn(scenario.context,field.name))field.value=scenario.context[field.name]??'';}
   const missing=[];
@@ -73,13 +78,13 @@ function renderProjectContext(){
 }
 function applyProject(next,{persist=true}={}){
   project=next;inputs=activeScenario().geometry;
-  formFields();renderModel();renderProjectContext();engineeringView?.render();renderStations();
+  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();renderStations();
   if(persist)persistProject();
 }
 function saveProject(){
   if(!project){notice('ข้อมูลโครงการยังไม่พร้อม',true);return;}
   download('S6006-project.json',serializeProject(project,source)+'\n','application/json');
-  notice('บันทึกโครงการเดียวแล้ว: สถานี มิติ คาน ดิน ระดับน้ำ และที่มาของค่าทุกสถานีที่แก้');
+  notice('บันทึกโครงการเดียวแล้ว: สถานี มิติ คาน ดิน ระดับน้ำ ที่มา และทางเลือกที่เก็บของทุกสถานี');
 }
 function changeStation(id){
   applyProject(selectStation(project,id,source));
@@ -87,7 +92,15 @@ function changeStation(id){
 }
 function setProjectControlsEnabled(enabled){
   for(const control of document.querySelectorAll('button,input,select,textarea'))control.disabled=!enabled;
-  if(enabled)renderProjectContext();
+  if(enabled){renderProjectContext();comparisonView?.render();}
+}
+function openComparisonReport(){
+  try{
+    const snapshot=saveComparisonSnapshot(project,source,window.localStorage);
+    window.open(snapshot.url,'_blank','noopener');
+    notice('เตรียมรายงานเปรียบเทียบจากค่าที่บันทึกแล้ว หากแท็บใหม่ไม่เปิด ให้กดลิงก์นี้: ');
+    const link=document.createElement('a');link.href=snapshot.url;link.target='_blank';link.rel='noopener';link.textContent='เปิดรายงานเปรียบเทียบฉบับนี้ ↗';$('#notice').append(link);
+  }catch(error){notice('เปิดรายงานเปรียบเทียบไม่ได้: '+error.message,true);}
 }
 function renderSummary(){
   const rows=Object.entries(audit.composedTotals).map(([key,r])=>'<tr><td>'+escape(AGGREGATE_LABELS[key]||key)+'</td><td class="num">'+format(r.sourceAdoptedValue,0)+'</td><td class="num">'+format(r.roundedDownKnownValue,0)+'</td><td class="num delta">'+format(r.deltaRoundedKnownToSourceAdopted,0)+'</td><td>'+unit(r.unit)+'</td><td><span class="status '+(r.complete?'':'amber')+'">'+(r.complete?'ข้อมูลตั้งต้นครบ':'ยอดเฉพาะค่าที่ทราบ')+'</span><small>'+(r.complete?'':r.missingCount+' ค่าตั้งต้นว่าง · ')+r.sourceMissingCount+' ผลคูณเดิมว่าง</small></td></tr>');
@@ -195,10 +208,16 @@ try{
     getScenario:activeScenario,getRevision:()=>scenarioRevision(activeScenario()),
     onChange:(section,patch)=>applyProject(updateActiveScenario(project,{[section]:patch},source)),onSave:saveProject,
   });
+  comparisonView=mountComparison($('#comparison-content'),{
+    getProject:()=>project,getSource:()=>source,onProjectChange:applyProject,
+    onNotice:notice,onDownload:download,onReport:openComparisonReport,
+    onEdit:name=>{setPanel(name);$('#panel-'+name).scrollIntoView({block:'start',behavior:'smooth'});},
+  });
   applyProject(project,{persist:false});
   if(restoreError){notice('เปิดงานล่าสุดในเบราว์เซอร์ไม่ได้: '+restoreError+' ขณะนี้แสดงชุดเริ่มต้น กรุณาเปิดไฟล์โครงการที่บันทึกไว้',true);$('#persistence-status').textContent='งานล่าสุดยังไม่ได้โหลด · โปรดเปิดไฟล์โครงการ JSON';}
   else if(restored){notice('กลับมาที่โครงการและสถานีที่แก้ล่าสุดแล้ว');$('#persistence-status').textContent='เปิดงานล่าสุดจากเบราว์เซอร์แล้ว · บันทึก JSON เพื่อเก็บหรือย้ายเครื่อง';}
   else $('#persistence-status').textContent='โครงการเริ่มต้น · การแก้ไขจะเก็บในเบราว์เซอร์ และบันทึกทุกสถานีเป็น JSON ไฟล์เดียวได้';
+  setProjectControlsEnabled(false);
   scene=mountCaseScene($('#case-scene'),inputs);await scene.ready;
   setProjectControlsEnabled(true);
   document.body.dataset.ready='true';
