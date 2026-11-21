@@ -231,6 +231,42 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     assertNoErrors(diagnostics);
   });
 
+  await check('S6006 withholds moment acceptance until detailing gates pass and rejects impossible or numerically invalid scenarios', async () => {
+    await panel(page, 'engineering');
+    await page.locator('#reset-beam').click();
+    await page.locator('#reset-soil').click();
+    await changeValue(page, '#beam-form [name="externalMuKnM"]', 30);
+    const gatedPath = await download(page, '#save-engineering', 's6006-engineering-gated-moment.json');
+    const gated = JSON.parse(await readFile(gatedPath, 'utf8'));
+    assert.equal(gated.calculationRevision, 'S6006-R2');
+    assert.ok(gated.beamResults.phiMnKnM > 30, 'Intermediate strength alone would exceed the entered demand');
+    assert.equal(gated.beamResults.usablePhiMnKnM, null, 'Minimum steel remains an unresolved gate');
+    assert.equal(gated.beamResults.externalDemand.momentUtilization, null);
+    assert.equal(gated.beamResults.checks.find(c => c.id === 'external-moment').status, 'review');
+    assert.match(await page.locator('[data-metric="usable-moment"]').innerText(), /ยังใช้ตรวจไม่ได้/);
+
+    await changeValue(page, '#beam-form [name="tensionBarDiameterMm"]', 16);
+    await changeValue(page, '#beam-form [name="stirrupDiameterMm"]', 8);
+    const detailedPath = await download(page, '#save-engineering', 's6006-engineering-detailed-section.json');
+    const detailed = JSON.parse(await readFile(detailedPath, 'utf8'));
+    assert.ok(detailed.beamResults.usablePhiMnKnM > 30);
+    assert.equal(detailed.beamResults.checks.find(c => c.id === 'external-moment').status, 'satisfied');
+    assert.equal(detailed.beamResults.projectApproved, false, 'A component check never approves the project');
+
+    await page.locator('#reset-beam').click();
+    await changeValue(page, '#beam-form [name="heightMm"]', 150);
+    await changeValue(page, '#beam-form [name="coverMm"]', 65);
+    assert.equal(await page.locator('#beam-form [name="coverMm"]').inputValue(), '40', 'Impossible two-face reinforcement fit is rejected');
+    assert.match(await page.locator('#engineering-notice').innerText(), /ค่าคานไม่ถูกต้อง/);
+    await page.locator('#reset-beam').click();
+    await changeValue(page, '#soil-form [name="effectiveCohesionKpa"]', 1);
+    await changeValue(page, '#soil-form [name="verticalDepthM"]', '1e-310');
+    assert.equal(await page.locator('#soil-form [name="verticalDepthM"]').inputValue(), '2', 'An unstable numerical divisor cannot produce an infinite FS');
+    assert.match(await page.locator('#engineering-notice').innerText(), /ค่าดินไม่ถูกต้อง/);
+    await page.locator('#reset-soil').click();
+    assertNoErrors(diagnostics);
+  });
+
   await check('S6006 knowledge and engineering panels remain reviewable without fabricated project approval', async () => {
     await panel(page, 'knowledge');
     assert.equal(await page.locator('.knowledge-grid .card').count(), 6);

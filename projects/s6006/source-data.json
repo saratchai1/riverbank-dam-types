@@ -85,7 +85,7 @@
     "excluded": "Third 222 m block and zero-length stations1025–1175 excluded from current totals."
   },
   "basis": "The app can reproduce sums from supplied cross-section areas and widths. This is not fresh CAD area extraction or proof of slope stability. Values from source inputs remain reported measurements/takeoff data, not app-generated geometry.",
-  "blankPolicy": "Preserve null source cells. Arithmetic-only audit uses blank=0 as Excel multiplication/SUM does; null never certifies a physical zero. A missing quantity with present nonzero input is explicitly flagged.",
+  "blankPolicy": "Preserve null source cells. Original workbook multiplication and SUM formulas can treat blank referenced cells as zero; that source behavior is recorded, not accepted as evidence of a physical zero. The app keeps missing inputs unknown, reports known partial sums separately, and flags missing source products when their inputs are present.",
   "allowanceDepth": {
     "sheet": "หาปริมาณวัสดุ",
     "cell": "F7",

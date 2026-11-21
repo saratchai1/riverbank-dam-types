@@ -38,13 +38,14 @@ test('BF1 capacities match independent 40-digit Decimal hand arithmetic', () => 
   near(r.phiFlexure, 0.9);
   near(r.MnKnM, 38.85086679550480266238614);
   near(r.phiMnKnM, 34.96578011595432239614753);
+  assert.equal(r.usablePhiMnKnM, null);
   near(r.VcKn, 84.71040487055491185868668);
   near(r.VsKn, 29.81276888937307836371082);
   near(r.phiVnKn, 85.89238031994599266679812);
   near(r.usablePhiVnKn, 31.76640182645809194700750);
   near(r.AsMinMm2, 399.7287554873478710874764);
   near(r.AvMinMm2, 70.10548964223256667669388);
-  assert.equal(r.formulaRows.length, 22);
+  assert.equal(r.formulaRows.length, 23);
   assert.ok(r.formulaRows.every(row => row.sourceKey && row.unit && row.assumption !== undefined));
 });
 
@@ -75,6 +76,7 @@ test('independent 25MPa/300×550mm benchmark verifies normal rectangular beam me
   near(r.blockDepthMm, 59.13586171463140213576740);
   near(r.MnKnM, 177.3487118918043186911926);
   near(r.phiMnKnM, 159.6138407026238868220733);
+  near(r.usablePhiMnKnM, r.phiMnKnM);
   near(r.VcKn, 125);
   near(r.VsKn, 98.17477042468103);
   near(r.AsMinMm2, 525);
@@ -82,6 +84,7 @@ test('independent 25MPa/300×550mm benchmark verifies normal rectangular beam me
   near(r.stirrupSpacingLimitMm, 250);
   near(r.usablePhiVnKn, r.phiVnKn);
   assert.equal(check(r, 'minimum-flexural-steel').status, 'satisfied');
+  assert.equal(check(r, 'minimum-flexural-exception').status, 'not-required');
   assert.equal(r.projectApproved, false);
 });
 
@@ -91,14 +94,37 @@ test('external factored demands stay separate and use the detailing-limited shea
   assert.equal(check(r, 'external-moment').status, 'review');
   assert.equal(check(r, 'external-shear').status, 'review');
   assert.ok(50 < r.phiVnKn && 50 > r.usablePhiVnKn);
-  near(r.externalDemand.momentUtilization, 100 / 34.965780115954322);
+  assert.equal(r.externalDemand.momentUtilization, null);
   near(r.externalDemand.shearUtilization, 50 / 31.766401826458092);
   near(r.selfWeightMuKnM, base.selfWeightMuKnM);
   near(r.phiMnKnM, base.phiMnKnM);
   const zero = calculateBeam({ ...DEFAULT_BEAM_INPUTS, externalMuKnM: 0, externalVuKn: 0 });
-  assert.equal(zero.externalDemand.momentUtilization, 0);
+  assert.equal(zero.externalDemand.momentUtilization, null);
   assert.equal(zero.externalDemand.MuKnM, 0);
+  assert.equal(check(zero, 'external-moment').status, 'review');
   assert.equal(zero.projectApproved, false);
+});
+
+test('moment acceptance requires usable flexural strength and cannot bypass minimum steel', () => {
+  const bf1 = calculateBeam({ ...DEFAULT_BEAM_INPUTS, externalMuKnM: 30 });
+  assert.ok(bf1.phiMnKnM > 30, 'The equation-only capacity is still reported for traceability');
+  assert.equal(bf1.usablePhiMnKnM, null);
+  assert.equal(bf1.externalDemand.momentUtilization, null);
+  assert.equal(check(bf1, 'external-moment').limit, null);
+  assert.equal(check(bf1, 'external-moment').status, 'review');
+  assert.equal(check(bf1, 'minimum-flexural-exception').status, 'pending');
+
+  const p = { ...DEFAULT_BEAM_INPUTS, widthMm: 300, heightMm: 550, coverMm: 30,
+    stirrupDiameterMm: 10, tensionBarDiameterMm: 20, tensionBarCount: 3,
+    fcKsc: 25 / KSC_TO_MPA, fyKsc: 400 / KSC_TO_MPA, fyvKsc: 250 / KSC_TO_MPA };
+  const adequate = calculateBeam({ ...p, externalMuKnM: 100 });
+  near(adequate.usablePhiMnKnM, 159.6138407026238868220733);
+  near(adequate.externalDemand.momentUtilization, 100 / 159.6138407026238868220733);
+  assert.equal(check(adequate, 'external-moment').status, 'satisfied');
+  near(check(adequate, 'external-moment').limit, adequate.usablePhiMnKnM);
+  assert.equal(check(adequate, 'minimum-flexural-exception').status, 'not-required');
+  assert.equal(check(calculateBeam({ ...p, externalMuKnM: 160 }), 'external-moment').status, 'review');
+  assert.equal(calculateBeam({ ...p, externalMuKnM: 0 }).externalDemand.momentUtilization, 0);
 });
 
 test('cover sensitivity is physical, and the source/default object is not mutated', () => {
@@ -121,13 +147,47 @@ test('historical metric beta1 bounds, tension transition and nonyielding rejecti
   assert.ok(transition.steelYields);
   assert.ok(transition.tensionStrain < 0.005 && transition.tensionStrain > 0.004);
   assert.ok(transition.phiFlexure < 0.9 && transition.phiFlexure > 0.65);
+  near(transition.usablePhiMnKnM, transition.phiMnKnM);
+  const lowStrain = calculateBeam({ ...DEFAULT_BEAM_INPUTS, widthMm: 350,
+    tensionBarDiameterMm: 26, tensionBarCount: 5, externalMuKnM: 100 });
+  assert.ok(lowStrain.steelYields && lowStrain.tensionStrain < 0.004);
+  assert.ok(lowStrain.phiMnKnM > 100);
+  assert.equal(lowStrain.usablePhiMnKnM, null);
+  assert.equal(lowStrain.externalDemand.momentUtilization, null);
+  assert.equal(check(lowStrain, 'external-moment').status, 'review');
   const over = calculateBeam({ ...DEFAULT_BEAM_INPUTS, widthMm: 800, heightMm: 300,
     tensionBarDiameterMm: 32, tensionBarCount: 10 });
   assert.equal(over.steelYields, false);
   assert.equal(over.MnKnM, null);
   assert.equal(over.phiMnKnM, null);
+  assert.equal(over.usablePhiMnKnM, null);
   assert.equal(over.phiFlexure, null);
   assert.equal(check(over, 'flexural-yield').status, 'review');
+});
+
+test('BF1 geometry requires top and bottom reinforcement to fit vertically inside the stirrup', () => {
+  const impossible = { ...DEFAULT_BEAM_INPUTS, heightMm: 150, coverMm: 65,
+    stirrupSpacingMm: 18, externalMuKnM: 3, externalVuKn: 1 };
+  assert.equal(validateBeamInputs(impossible).valid, false);
+  assert.throws(() => calculateBeam(impossible), /เหล็กบนและล่างแบบ BF1/);
+  // The two Ø12 faces use 24 mm, with 25 mm clear between faces and
+  // 2(40+6) mm for cover/stirrup: the preliminary minimum depth is 141 mm.
+  assert.equal(validateBeamInputs({ ...DEFAULT_BEAM_INPUTS, heightMm: 140 }).valid, false);
+  assert.equal(validateBeamInputs({ ...DEFAULT_BEAM_INPUTS, heightMm: 141 }).valid, true);
+  assert.equal(validateBeamInputs({ ...impossible, heightMm: 191 }).valid, true);
+});
+
+test('beam numerical overflow cannot be converted into a missing-value JSON result', () => {
+  for (const stirrupSpacingMm of [Number.MIN_VALUE, 1e-310, 2 ** -1022, 1e-300]) {
+    const candidate = { ...DEFAULT_BEAM_INPUTS, stirrupSpacingMm };
+    if (stirrupSpacingMm === 1e-300) {
+      const result = calculateBeam(candidate);
+      assert.ok(Number.isFinite(result.VsKn));
+      assert.equal(result.usablePhiVnKn, null, 'Finite excessive Vs remains a separate engineering limit');
+    } else {
+      assert.throws(() => calculateBeam(candidate), error => error instanceof RangeError && /ช่วงตัวเลข|ตัวหาร/.test(error.message));
+    }
+  }
 });
 
 test('beam validation rejects unavailable dimensions, impossible layers, deep beams and unsafe objects', () => {
@@ -224,4 +284,23 @@ test('soil missing strengths, impossible stresses and nonnumeric inputs do not b
     frictionAngleDeg: null, effectiveCohesionKpa: null, undrainedStrengthKpa: 30 };
   assert.equal(validateSoilInputs(totalStress).valid, true);
   near(calculateSoil(totalStress).cases[0].factorOfSafety, 2.175);
+});
+
+test('soil numerical underflow and overflow are explicit errors in both stress modes', () => {
+  for (const mode of ['effective', 'undrained']) {
+    const p = { ...DEFAULT_SOIL_INPUTS, mode, effectiveCohesionKpa: 1, undrainedStrengthKpa: 1 };
+    for (const verticalDepthM of [Number.MIN_VALUE, 1e-310]) {
+      assert.throws(() => calculateSoil({ ...p, verticalDepthM }),
+        error => error instanceof RangeError && /ช่วงตัวเลข|ตัวหาร/.test(error.message));
+    }
+    // Normal finite operands can still overflow after division by a very
+    // small but normal shear stress; the result must not serialize as null.
+    assert.throws(() => calculateSoil({ ...p, verticalDepthM: 1e-307,
+      effectiveCohesionKpa: 1000, undrainedStrengthKpa: 1000 }),
+    error => error instanceof RangeError && /ช่วงตัวเลข/.test(error.message));
+  }
+  assert.throws(() => calculateSoil({ ...DEFAULT_SOIL_INPUTS,
+    unitWeightKnM3: Number.MIN_VALUE, verticalDepthM: Number.MIN_VALUE }), RangeError);
+  assert.throws(() => soilShearStrength({ mode: 'effective', normalStressKpa: Number.MAX_VALUE,
+    porePressureKpa: 0, effectiveCohesionKpa: 1, frictionAngleDeg: 60 }), RangeError);
 });

@@ -26,7 +26,7 @@ export const ENGINEERING_REFERENCES = Object.freeze({
   'USACE-1902': Object.freeze({
     title: 'USACE EM1110-2-1902, Slope Stability, 31October2003',
     url: 'https://www.publications.usace.army.mil/Portals/76/Publications/EngineerManuals/EM_1110-2-1902.pdf?ver=2014-05-07-083439-823',
-    sections: 'AppendixC C-22–C-29; shear strength definition in Chapters2 and AppendixC',
+    sections: 'AppendixC §C-7 Eqs.C-22/C-23/C-27/C-29; AppendixE §E-5 Eqs.E-15/E-16',
   }),
 });
 
@@ -49,6 +49,19 @@ const finite = value => typeof value === 'number' && Number.isFinite(value);
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const reserved = new Set(['__proto__', 'constructor', 'prototype']);
 const fmt = value => value === null ? 'ยังไม่มีข้อมูล' : Number(value.toPrecision(10)).toString();
+const MIN_NORMAL_NUMBER = 2 ** -1022;
+
+function requireFiniteDerived(values) {
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== null && !finite(value)) throw new RangeError(`ผลคำนวณ ${name} ไม่เป็นจำนวนจำกัด; ค่าที่ป้อนอยู่นอกช่วงตัวเลขที่โมดูลคำนวณได้`);
+  }
+}
+
+function requireNormalPositiveDivisor(value, name) {
+  // This is an IEEE-754 numerical limit, not an engineering minimum. Subnormal
+  // divisors can underflow during multiplication or lose precision before a ratio.
+  if (!finite(value) || value < MIN_NORMAL_NUMBER) throw new RangeError(`${name} ต้องเป็นตัวหารบวกในช่วงเลขปกติ; ค่าต่ำเกินช่วงตัวเลขที่โมดูลคำนวณได้`);
+}
 
 function checkObject(input, defaults) {
   const errors = [];
@@ -92,6 +105,8 @@ export function validateBeamInputs(input) {
       const requiredWidth = input.tensionBarCount * input.tensionBarDiameterMm + (input.tensionBarCount - 1) * clear;
       const availableWidth = input.widthMm - 2 * (input.coverMm + input.stirrupDiameterMm);
       if (requiredWidth > availableWidth) errors.push('เหล็กดึงหนึ่งชั้นไม่พอดีกับความกว้างและระยะห่างขั้นต่ำเบื้องต้น; โมดูลยังไม่รองรับเหล็กหลายชั้น');
+      const requiredHeight = 2 * (input.coverMm + input.stirrupDiameterMm + input.tensionBarDiameterMm) + clear;
+      if (input.heightMm < requiredHeight) errors.push('เหล็กบนและล่างแบบ BF1 ไม่พอดีในความสูงภายในปลอกพร้อมระยะห่างเบื้องต้น; ยังต้องตรวจมวลรวมและรายละเอียดการยึดเหล็กแยกต่างหาก');
       if (input.spanM * 1000 <= 4 * input.heightMm) errors.push('ช่วง/ความลึกอยู่ในขอบเขตคานลึกหรือบริเวณ D-region; สูตรคานตื้นของโมดูลนี้ไม่ใช้กับกรณีนี้');
     }
     return { valid: errors.length === 0, errors };
@@ -134,6 +149,7 @@ export function calculateBeam(input) {
   const MnKnM = steelYields ? AsMm2 * fyMpa * (d - blockDepthMm / 2) / 1e6 : null;
   const phiMnKnM = MnKnM === null ? null : phiFlexure * MnKnM;
   const VcKn = Math.sqrt(fcMpa) * b * d / 6 / 1000;
+  requireNormalPositiveDivisor(p.stirrupSpacingMm, 'ระยะปลอก s');
   const VsKn = AvMm2 * fyvMpa * d / p.stirrupSpacingMm / 1000;
   const VnKn = VcKn + VsKn;
   const phiShear = 0.75;
@@ -155,13 +171,26 @@ export function calculateBeam(input) {
   const selfWeightMuKnM = factoredSelfWeightKnM * p.spanM ** 2 / 8;
   const selfWeightVuKn = factoredSelfWeightKnM * p.spanM / 2;
   const minimumFlexuralSteelSatisfied = AsMm2 >= AsMinMm2;
+  // Keep the equation-only capacity visible, but do not use it to accept a
+  // demand until the implemented prerequisites hold. The 4/3 As,required
+  // exception is intentionally not implemented or inferred from self-weight.
+  const usablePhiMnKnM = steelYields && flexuralStrainSatisfies && minimumFlexuralSteelSatisfied ? phiMnKnM : null;
+  const numericResults = {
+    effectiveDepthMm, AsMm2, AvMm2, AsMinMm2, AvMinMm2, fcMpa, fyMpa, fyvMpa,
+    beta1, blockDepthMm, neutralAxisMm, tensionStrain, yieldStrain,
+    phiFlexure, MnKnM, phiMnKnM, usablePhiMnKnM, VcKn, VsKn, VnKn, phiShear, phiVnKn, usablePhiVnKn,
+    VsLimitKn, stirrupSpacingLimitMm, selfWeightKnM, factoredSelfWeightKnM,
+    selfWeightMuKnM, selfWeightVuKn,
+  };
+  requireFiniteDerived(numericResults);
   const check = (id, label, status, value, limit, note) => ({ id, label, status, value, limit, note });
   const externalDemand = {
     MuKnM: p.externalMuKnM, VuKn: p.externalVuKn,
-    momentUtilization: p.externalMuKnM === null || phiMnKnM === null ? null : p.externalMuKnM / phiMnKnM,
+    momentUtilization: p.externalMuKnM === null || usablePhiMnKnM === null ? null : p.externalMuKnM / usablePhiMnKnM,
     shearUtilization: p.externalVuKn === null || usablePhiVnKn === null ? null : p.externalVuKn / usablePhiVnKn,
     basis: 'ผู้ใช้ต้องป้อนแรงออกแบบที่คูณตัวคูณแล้ว; ไม่บวกแรงนี้เข้ากับตัวอย่างน้ำหนักตัวเองอัตโนมัติ',
   };
+  requireFiniteDerived({ momentUtilization: externalDemand.momentUtilization, shearUtilization: externalDemand.shearUtilization });
   const checks = [
     check('flexural-yield', 'ตรวจสมมติฐานเหล็กดึงคราก', steelYields ? 'satisfied' : 'review', tensionStrain, yieldStrain,
       steelYields ? 'εt ≥ fy/Es จึงใช้สมดุลแรงด้วย Asfy ได้ในโมเดลนี้' : 'εt < fy/Es: ไม่คืนค่า Mn/φMn จากสมมติฐานเหล็กคราก ต้องวิเคราะห์ strain compatibility เพิ่ม'),
@@ -169,18 +198,20 @@ export function calculateBeam(input) {
       'เงื่อนไข εt ≥ 0.004 ตามรูปแบบ ACI318-02 ที่เลือก; ไม่ใช่การตรวจ code ทุกข้อ'),
     check('minimum-flexural-steel', 'เหล็กดึงขั้นต่ำ As,min', minimumFlexuralSteelSatisfied ? 'satisfied' : 'review', AsMm2, AsMinMm2,
       minimumFlexuralSteelSatisfied ? 'As ≥ As,min ในหน้าตัดที่เลือก' : 'As ต่ำกว่าเกณฑ์ขั้นต่ำทั่วไป ต้องยืนยันการออกแบบเดิมและเงื่อนไขข้อยกเว้นก่อนใช้กำลังเพื่อรับรองคาน'),
-    check('minimum-flexural-exception', 'ข้อยกเว้น 4/3 ของ As ที่ต้องการ', 'pending', null, null,
-      'ไม่ใช้ข้อยกเว้นจากน้ำหนักตัวเองเพียงกรณีเดียว; ต้องมีแรงครบทุกหน้าตัดและการตรวจรายละเอียดจริง'),
+    check('minimum-flexural-exception', 'ข้อยกเว้น 4/3 ของ As ที่ต้องการ', minimumFlexuralSteelSatisfied ? 'not-required' : 'pending', null, null,
+      minimumFlexuralSteelSatisfied ? 'As ≥ As,min จึงไม่ต้องอาศัยข้อยกเว้นนี้'
+        : 'โมดูลไม่ใช้ข้อยกเว้นนี้และไม่ใช้แรงน้ำหนักตัวเองเพียงกรณีเดียวแทนแรงครบทุกหน้าตัด; ยังไม่ให้ใช้ φMn เพื่อตัดสินแรงจริง'),
     check('minimum-stirrups', 'เหล็กปลอกขั้นต่ำเมื่อ Vu > φVc/2', shearMinimumSatisfied ? 'satisfied' : 'review', AvMm2, AvMinMm2,
       `Av,min ตาม ACI318M-02; เกณฑ์เริ่มต้องมีเหล็กขั้นต่ำ φVc/2 = ${fmt(phiShear * VcKn / 2)} kN. หากไม่ครบ โมดูลไม่ให้ใช้ Vs เต็มเพื่อรับรองแรงสูงกว่านี้`),
     check('stirrup-spacing', 'ระยะปลอกในโมเดลเฉือน', shearSpacingSatisfied ? 'satisfied' : 'review', p.stirrupSpacingMm, stirrupSpacingLimitMm,
       'เกณฑ์ d/2 หรือ d/4 ตามระดับ Vs พร้อมเพดาน 600/300 mm; ยังไม่ตรวจระยะพัฒนาแรงและขอปลอก'),
     check('maximum-shear', 'ขีดจำกัด Vs ของหน้าตัด', shearUpperLimitSatisfied ? 'satisfied' : 'review', VsKn, VsLimitKn,
       'หากเกินขีดจำกัด ไม่คืนกำลังเฉือนที่ใช้ตรวจแรงได้'),
-    check('external-moment', 'Mu ออกแบบจริงเทียบ φMn', p.externalMuKnM === null ? 'pending'
-      : phiMnKnM === null || p.externalMuKnM > phiMnKnM || !flexuralStrainSatisfies ? 'review' : 'satisfied', p.externalMuKnM, phiMnKnM,
+    check('external-moment', 'Mu ออกแบบจริงเทียบกำลังดัดหลังตรวจเงื่อนไข', p.externalMuKnM === null ? 'pending'
+      : usablePhiMnKnM === null || p.externalMuKnM > usablePhiMnKnM ? 'review' : 'satisfied', p.externalMuKnM, usablePhiMnKnM,
       p.externalMuKnM === null ? 'ยังไม่มี Mu จริง; ไม่แทนช่องว่างด้วยศูนย์'
-        : 'เป็นการเทียบกำลังดัดแยกเงื่อนไขเท่านั้น; ยังต้องผ่านเหล็กขั้นต่ำและตรวจแรง/รายละเอียดครบ'),
+        : usablePhiMnKnM === null ? 'ยังไม่ให้ใช้กำลังดัด: ต้องมีเหล็กคราก, εt ≥ 0.004 และ As ≥ As,min; โมดูลไม่ใช้ข้อยกเว้น 4/3'
+          : 'เทียบกับ usablePhiMn หลังผ่านเกณฑ์เหล็กคราก ความเครียดและเหล็กขั้นต่ำในโมดูล; ยังไม่รับรองแรง/รายละเอียดทั้งระบบ'),
     check('external-shear', 'Vu ออกแบบจริงเทียบกำลังเฉือนที่จำกัดด้วยรายละเอียด', p.externalVuKn === null ? 'pending'
       : usablePhiVnKn === null || p.externalVuKn > usablePhiVnKn ? 'review' : 'satisfied', p.externalVuKn, usablePhiVnKn,
       p.externalVuKn === null ? 'ยังไม่มี Vu จริง; ไม่แทนช่องว่างด้วยศูนย์'
@@ -201,7 +232,7 @@ export function calculateBeam(input) {
     F('yieldStrain', 'ความเครียดคราก', 'εy = fy/Es', `${fmt(fyMpa)}/200000`, yieldStrain, '—'),
     F('phiFlexure', 'ตัวคูณลดกำลังดัด', 'φ = 0.90 if εt≥0.005; interpolate 0.65→0.90 from εy→0.005', `εt=${fmt(tensionStrain)}; εy=${fmt(yieldStrain)}`, phiFlexure, '—'),
     F('MnKnM', 'กำลังดัดระบุ', 'Mn = Asfy(d−a/2)/10⁶', `${fmt(AsMm2)}×${fmt(fyMpa)}×(${fmt(d)}−${fmt(blockDepthMm)}/2)/10⁶`, MnKnM, 'kN·m', 'SP-LEGACY-BEAM', 'คืน null หากสมมติฐานเหล็กครากไม่ถูกต้อง'),
-    F('phiMnKnM', 'กำลังดัดคูณ φ', 'φMn = φ × Mn', `${fmt(phiFlexure)}×${fmt(MnKnM)}`, phiMnKnM, 'kN·m'),
+    F('phiMnKnM', 'กำลังดัดเชิงสมการ (ค่าระหว่างคำนวณ)', 'φMn = φ × Mn', `${fmt(phiFlexure)}×${fmt(MnKnM)}`, phiMnKnM, 'kN·m', 'SP-LEGACY-BEAM', 'ยังไม่ใช่กำลังที่ใช้ตัดสิน Mu; ต้องอ่าน usablePhiMn หลังตรวจความเครียดและเหล็กขั้นต่ำ'),
     F('AsMinMm2', 'เหล็กดึงขั้นต่ำทั่วไป', 'As,min = max(√fc/4,1.4)bd/fy', `max(√${fmt(fcMpa)}/4,1.4)×${b}×${fmt(d)}/${fmt(fyMpa)}`, AsMinMm2, 'mm2', 'SP-LEGACY-BEAM', 'ยังไม่ใช้ข้อยกเว้น 4/3 As,required'),
     F('VcKn', 'กำลังเฉือนคอนกรีต', 'Vc = √fc bd/(6×1000)', `√${fmt(fcMpa)}×${b}×${fmt(d)}/6000`, VcKn, 'kN', 'SP-LEGACY-BEAM', 'normal weight λ=1; ไม่มีแรงอัดร่วม'),
     F('VsKn', 'กำลังเฉือนจากปลอก', 'Vs = Avfyv d/(s×1000)', `${fmt(AvMm2)}×${fmt(fyvMpa)}×${fmt(d)}/(${p.stirrupSpacingMm}×1000)`, VsKn, 'kN'),
@@ -212,12 +243,14 @@ export function calculateBeam(input) {
     F('factoredSelfWeightKnM', 'น้ำหนักตัวคูณตัวคูณ', 'wu = factor × w', `${p.deadLoadFactor}×${fmt(selfWeightKnM)}`, factoredSelfWeightKnM, 'kN/m', 'ASSUMED-SELF-WEIGHT-ONLY'),
     F('selfWeightMuKnM', 'โมเมนต์ตัวอย่าง', 'Mu,self = wuL²/8', `${fmt(factoredSelfWeightKnM)}×${p.spanM}²/8`, selfWeightMuKnM, 'kN·m', 'ASSUMED-SIMPLE-SPAN', 'แรงกระจายสม่ำเสมอบนช่วงรองรับง่าย ไม่แทนคานต่อเนื่องจริง'),
     F('selfWeightVuKn', 'แรงเฉือนตัวอย่าง', 'Vu,self = wuL/2', `${fmt(factoredSelfWeightKnM)}×${p.spanM}/2`, selfWeightVuKn, 'kN', 'ASSUMED-SIMPLE-SPAN'),
+    F('usablePhiMnKnM', 'กำลังดัดที่ใช้เทียบ Mu ในโมดูล', 'usableφMn = φMn only if steel yields, εt≥0.004 and As≥As,min; otherwise unavailable', `เหล็กคราก=${steelYields}; εt=${fmt(tensionStrain)}; As=${fmt(AsMm2)} / As,min=${fmt(AsMinMm2)}`, usablePhiMnKnM, 'kN·m', 'SP-LEGACY-BEAM', 'นโยบายโมดูลแบบอนุรักษนิยม; ไม่ใช้ข้อยกเว้น 4/3 และไม่ใช่การรับรองทั้งระบบ'),
   ];
   const warnings = [
     'ใช้หน้าตัด BF1 จาก SD-05: เหล็กดึงหนึ่งหน้าเท่านั้น ไม่เพิ่มกำลังจากเหล็กอัดอีกหน้า; ไม่มีแรงอัดร่วม บิด ดัดสองแกน หรือ prestress',
     'cover 40 mm และช่วงรองรับง่าย 3 m เป็นสมมติฐานที่ต้องยืนยัน แม้แบบระบุระยะเข็ม 3 m ก็ยังไม่ได้ยืนยันสภาพยึดปลายคานจริง',
     'สมการที่เลือกเป็นรูปแบบประวัติ ACI318M-02 ไม่ใช่การตรวจมาตรฐานปัจจุบันครบทุกข้อ; ต้องยืนยันหลักเกณฑ์ออกแบบที่ใช้จริง',
     'φ(Vc+Vs) เป็นค่าจากสมการกำลังระบุ; ใช้ usablePhiVnKn ในการเทียบ Vu เพราะปลอกขั้นต่ำ/ระยะปลอกอาจจำกัดกำลังที่ใช้ได้',
+    'φMn เป็นค่าระหว่างคำนวณ; ใช้ usablePhiMnKnM เทียบ Mu ได้เมื่อเหล็กคราก, εt ≥ 0.004 และ As ≥ As,min เท่านั้น; โมดูลไม่ใช้ข้อยกเว้น 4/3',
     'ยังไม่ตรวจแรงราวกันตก ลม แรงบิด คานต่อเนื่อง จุดต่อ ระยะพัฒนาแรง/สมอ การโก่ง การแตกร้าว เสาเข็ม และปฏิสัมพันธ์ดิน–โครงสร้าง',
     'การผ่านเงื่อนไขกำลังข้อใดข้อหนึ่งไม่ใช่การอนุมัติหน้าตัดหรือระบบทั้งโครงการ; Mu/Vu ที่ไม่ทราบยังคงเป็น null',
   ];
@@ -225,11 +258,7 @@ export function calculateBeam(input) {
   if (!steelYields) warnings.push('เหล็กไม่ครากตาม strain trial: โมดูลไม่คืนกำลังดัดที่อาศัย Asfy ต้องใช้การวิเคราะห์หน้าตัดเพิ่มเติม');
   return {
     method: 'Selected historical ACI318M-02 rectangular singly reinforced normal-weight beam equations',
-    effectiveDepthMm, AsMm2, AvMm2, AsMinMm2, AvMinMm2, fcMpa, fyMpa, fyvMpa,
-    beta1, blockDepthMm, neutralAxisMm, tensionStrain, yieldStrain, steelYields,
-    phiFlexure, MnKnM, phiMnKnM, VcKn, VsKn, VnKn, phiShear, phiVnKn, usablePhiVnKn,
-    VsLimitKn, stirrupSpacingLimitMm, selfWeightKnM, factoredSelfWeightKnM,
-    selfWeightMuKnM, selfWeightVuKn, externalDemand, checks, formulaRows, warnings,
+    ...numericResults, steelYields, externalDemand, checks, formulaRows, warnings,
     projectApproved: false,
   };
 }
@@ -273,7 +302,9 @@ export function soilShearStrength({ mode, normalStressKpa, porePressureKpa = nul
   }
   const effectiveNormalStressKpa = normalStressKpa - porePressureKpa;
   if (effectiveNormalStressKpa < 0) throw new RangeError('σ′<0 อยู่นอกขอบเขต frictional contact; ไม่ clamp เป็นศูนย์อย่างเงียบๆ');
-  return { shearStrengthKpa: effectiveCohesionKpa + effectiveNormalStressKpa * Math.tan(frictionAngleDeg * Math.PI / 180),
+  const shearStrengthKpa = effectiveCohesionKpa + effectiveNormalStressKpa * Math.tan(frictionAngleDeg * Math.PI / 180);
+  requireFiniteDerived({ effectiveNormalStressKpa, shearStrengthKpa });
+  return { shearStrengthKpa,
     effectiveNormalStressKpa, porePressureKpa, basis: 'Effective stress: τf=c′+(σ−u)tanφ′' };
 }
 
@@ -289,11 +320,15 @@ export function calculateSoil(input) {
   const makeCase = (id, label, gamma, porePressureKpa) => {
     const normalStressKpa = gamma * p.verticalDepthM * cosSquared;
     const shearDemandKpa = gamma * p.verticalDepthM * sinCos;
+    requireFiniteDerived({ normalStressKpa, shearDemandKpa, porePressureKpa });
+    requireNormalPositiveDivisor(shearDemandKpa, 'แรงเฉือนที่ต้องต้าน τ');
     const strength = soilShearStrength({ ...p, normalStressKpa, porePressureKpa });
+    const factorOfSafety = strength.shearStrengthKpa / shearDemandKpa;
+    requireFiniteDerived({ factorOfSafety });
     return { id, label, normalStressKpa, porePressureKpa: strength.porePressureKpa,
       effectiveNormalStressKpa: strength.effectiveNormalStressKpa,
       shearDemandKpa, shearStrengthKpa: strength.shearStrengthKpa,
-      factorOfSafety: strength.shearStrengthKpa / shearDemandKpa,
+      factorOfSafety,
       status: 'illustrative', gammaKnM3: gamma, basis: strength.basis };
   };
   const cases = p.mode === 'effective' ? [

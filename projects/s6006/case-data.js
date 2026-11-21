@@ -36,7 +36,7 @@ export const QUESTIONS = [
   ['มาตรฐานที่ระบุเป็นมาตรฐานล่าสุดหรือไม่?', 'รายการคำนวณ S6006 อ้าง ACI 318-02, PCI 1999 และ AISC ASD ฉบับที่ 9 เป็นฐานของเอกสารเดิม การสาธิตใช้สมการและขอบเขตที่ระบุไว้ ไม่ได้ประกาศว่าครบมาตรฐานปัจจุบันของโครงการใหม่ วิศวกรต้องเลือกฉบับมาตรฐานและเกณฑ์โครงการก่อนออกแบบใช้งาน'],
 ];
 export const METHOD_SOURCES = [
-  {title:'USACE EM 1110-2-1902 · Slope Stability (2003)',url:'https://www.publications.usace.army.mil/Portals/76/Publications/EngineerManuals/EM_1110-2-1902.pdf?ver=2014-05-07-083439-823',location:'Appendix C, C-22–C-27; effective/total stress และเงื่อนไขน้ำ',use:'ฐานสมการกำลังเฉือนและลาดอนันต์ พร้อมขอบเขตแบบจำลอง'},
+  {title:'USACE EM 1110-2-1902 · Slope Stability (2003)',url:'https://www.publications.usace.army.mil/Portals/76/Publications/EngineerManuals/EM_1110-2-1902.pdf?ver=2014-05-07-083439-823',location:'§C-7 สมการ C-22/C-23/C-27/C-29; §E-5 สมการ E-15/E-16',use:'ฐานสมการกำลังเฉือนและลาดอนันต์ พร้อมขอบเขตแบบจำลอง'},
   {title:'StructurePoint spSlab/spBeam v5.50',url:'https://structurepoint.org/pdfs/manuals/spSlabPlusBeam/spSlabPlusBeam%20Manual%20v5.50.pdf',location:'§2.12 และ §2.14; Vc, As,min, Av,min และการแยก ACI 318M-02',use:'เอกสารผู้พัฒนาซอฟต์แวร์สำหรับตรวจสมการคอนกรีต ไม่แทน code ฉบับรับรอง'},
   {title:'FHWA HEC-11 · Design of Riprap Revetment (1989, archived)',url:'https://www.fhwa.dot.gov/engineering/hydraulics/library_arc.cfm?id=27&pub_number=11',location:'Hydraulic assessment / toe and extent of protection',use:'อ้างอิงประวัติวิธีคิด ขนาดหินและการกัดเซาะต้องมีข้อมูลน้ำเฉพาะพื้นที่'},
 ];
