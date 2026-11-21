@@ -27,16 +27,26 @@ function geometry(input) {
 }
 
 /** Pure SVG; Three.js is imported only when mounting the interactive scene. */
-export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = { high: 99.10, survey: 97.30, low: 87.40 } } = {}) {
+export function scenarioSectionOptions(scenario) {
+  return { waterSource: 'scenario', water: {
+    high: scenario.context.waterHighLevel, low: scenario.context.waterLowLevel,
+    groundwater: scenario.context.groundwaterLevel,
+  } };
+}
+
+export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = { high: 99.10, survey: 97.30, low: 87.40 }, waterSource = 'reference' } = {}) {
   if (![width, height].every(Number.isFinite) || width < 600 || height < 360) throw new RangeError('รูปตัดต้องมีขนาดอย่างน้อย 600 × 360');
   const g = geometry(inputs), { p, c } = g;
-  const levels = { high: 99.10, survey: 97.30, low: 87.40, ...water };
-  if (!Object.values(levels).every(Number.isFinite)) throw new RangeError('ระดับน้ำต้องเป็นตัวเลขที่มีค่าจำกัด');
+  if (!['reference', 'scenario'].includes(waterSource)) throw new RangeError('ต้องระบุที่มาของระดับน้ำ');
+  const levels = waterSource === 'reference' ? { high: 99.10, survey: 97.30, low: 87.40, ...water } : { ...water };
+  if (!Object.entries(levels).every(([key, value]) => ['high', 'survey', 'low', 'groundwater'].includes(key)
+    && (waterSource === 'scenario' && value === null || Number.isFinite(value)))) throw new RangeError('ระดับน้ำต้องเป็นตัวเลขที่มีค่าจำกัด หรือยังไม่ทราบ');
+  const knownLevels = Object.values(levels).filter(Number.isFinite);
   const id = `s6006-section-${++svgSequence}`;
   const pts = [...g.face, ...g.sand, ...g.toe, ...g.walk];
   const loX = Math.min(...pts.map(v => v.x)) - 1.2, hiX = Math.max(...pts.map(v => v.x)) + 1.4;
-  const loY = Math.min(...pts.map(v => v.y), levels.low) - 1.1;
-  const hiY = Math.max(p.crestLevel, levels.high) + 1.4;
+  const loY = Math.min(...pts.map(v => v.y), ...knownLevels) - 1.1;
+  const hiY = Math.max(p.crestLevel, ...knownLevels) + 1.4;
   const plot = { x: 70, y: 89, w: width - 285, h: height - 183 };
   const scale = Math.min(plot.w / (hiX - loX), plot.h / (hiY - loY));
   const padX = (plot.w - (hiX - loX) * scale) / 2, padY = (plot.h - (hiY - loY) * scale) / 2;
@@ -81,13 +91,15 @@ export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = 
   out.push(line(heightX, Y(p.crestLevel), heightX, Y(p.toeLevel), 'class="dim"'));
   [p.crestLevel, p.toeLevel].forEach(y => out.push(line(heightX - 4, Y(y), heightX + 4, Y(y), 'class="dim"')));
   out.push(text(heightX - 9, (Y(p.crestLevel) + Y(p.toeLevel)) / 2, `H ${fmt(c.height)} ม.`, `text-anchor="middle" class="small mono" transform="rotate(-90 ${xy(heightX - 9)} ${xy((Y(p.crestLevel) + Y(p.toeLevel)) / 2)})"`));
-  // Source water references stay explicitly source references after a geometry edit.
+  // Scenario levels remain context only; no pore-pressure field is inferred.
   const waterX = width - 202;
-  for (const [key, label, dash] of [['high', 'น้ำสูงเฉลี่ย', '7 4'], ['survey', 'น้ำขณะสำรวจ', '3 3'], ['low', 'น้ำต่ำเฉลี่ย', '7 4']]) {
+  for (const [key, label, dash] of [['high', 'น้ำสูง', '7 4'], ['survey', 'น้ำขณะสำรวจ', '3 3'], ['low', 'น้ำต่ำ', '7 4'], ['groundwater', 'น้ำใต้ดินอ้างอิง', '2 4']]) {
+    if (!Number.isFinite(levels[key])) continue;
     const z = levels[key], faceX = Math.max(0, Math.min(c.run, (p.crestLevel - z) * p.slopeH));
-    out.push(line(X(faceX), Y(z), width - 20, Y(z), `stroke="${COLORS.water}" stroke-width="1" stroke-dasharray="${dash}" opacity=".62"`));
-    out.push(text(waterX, Y(z) - 5, `${label} ${fmt(z)} (แบบ)`, 'class="water-label halo"'));
+    out.push(line(X(faceX), Y(z), width - 20, Y(z), `data-water-key="${key}" stroke="${COLORS.water}" stroke-width="1" stroke-dasharray="${dash}" opacity=".62"`));
+    out.push(text(waterX, Y(z) - 5, `${label} ${fmt(z)} (${waterSource === 'reference' ? 'แบบ' : 'บริบทผู้ใช้'})`, 'class="water-label halo"'));
   }
+  if (!knownLevels.length) out.push(text(waterX, 74, 'ยังไม่มีระดับน้ำของสถานการณ์นี้', 'class="water-label"'));
   const faceAt = (fraction, t = 0) => pt(c.run * fraction + g.normal.x * t, p.crestLevel - c.height * fraction + g.normal.y * t);
   const near = faceAt(.37), inner = faceAt(.37, p.rockThickness);
   out.push(line(X(near.x), Y(near.y), X(inner.x), Y(inner.y), 'stroke="#344f59" stroke-width="1.4"'));
@@ -113,7 +125,7 @@ export function typicalSectionSVG(inputs, { width = 1000, height = 420, water = 
   });
   out.push(text(20, height - 43, '* ทรายเป็นแถบขั้นต่ำสมมุติ; ตีนเขื่อนฐานราบสมมาตร H ขั้นต่ำในแบบ 2 ม. รูปจริงต้องใช้พื้นท้องน้ำแต่ละหน้าตัด', 'class="note"'));
   out.push(text(20, height - 25, 'ยังไม่หักส่วนซ้อนที่รอยต่อและปลายงาน · ไม่แสดงดินสำรวจ/ปริมาตรถมทั้งหมด · ไม่ใช่แบบก่อสร้าง', 'class="note"'));
-  out.push(text(20, height - 9, 'ที่มา: S6006–SD–02, PDF หน้า 36 / แผ่น 35 จาก 45 · ระดับน้ำคงตามแบบอ้างอิง', 'class="sub"'));
+  out.push(text(20, height - 9, 'ต้นแบบ: S6006–SD–02, PDF 36 · ' + (waterSource === 'reference' ? 'ระดับน้ำคงตามแบบอ้างอิง' : 'ระดับน้ำเป็นบริบทสถานการณ์ ไม่ใช่ผลวิเคราะห์แรงดันน้ำ'), 'class="sub"'));
   return out.join('\n') + '</svg>';
 }
 

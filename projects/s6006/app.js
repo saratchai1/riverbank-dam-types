@@ -1,17 +1,20 @@
-import { DEFAULT_INPUTS, validateInputs, calculateTypical, normalizeSourceRows, auditSourceQuantities } from './engine.js';
-import { typicalSectionSVG, mountCaseScene } from './visuals.js';
+import { DEFAULT_INPUTS, calculateTypical, normalizeSourceRows, auditSourceQuantities } from './engine.js';
+import { typicalSectionSVG, scenarioSectionOptions, mountCaseScene } from './visuals.js';
 import { SOURCE_FILES, sourceURL, REPORTED_FS, SOIL_SOURCE, CASE_REVIEWS, QUESTIONS, METHOD_SOURCES, AGGREGATE_LABELS } from './case-data.js';
 import { mountEngineering } from './engineering-ui.js';
+import { PROJECT_MAX_BYTES, createProject, getActiveScenario, stationCatalog, projectRevision, scenarioRevision, isBaselineScenario, updateActiveScenario, selectStation, parseProject, serializeProject } from './project.js';
+import { saveWorkingProject, loadWorkingProject, saveReportSnapshot } from './project-storage.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const format = (value, digits=3) => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-US',{maximumFractionDigits:digits});
 const unit = value => ({m:'ม.',m2:'ตร.ม.',m3:'ลบ.ม.',degree:'องศา'}[value] || value);
 const station = value => Math.floor(value/1000)+'+'+String(value%1000).padStart(3,'0');
-const inputs = {...DEFAULT_INPUTS};
-let source, audit, normalized, scene;
+let inputs = {...DEFAULT_INPUTS};
+let source, audit, normalized, scene, project, catalog, engineeringView;
+const activeScenario = () => getActiveScenario(project);
 const fields = [
-  ['length','ความยาวคำนวณทฤษฎี','ม.',1000],['crestLevel','ระดับสันเขื่อน','ระดับสมมติ',101],['toeLevel','ระดับตีนเขื่อน','ระดับสมมติ',88],['slopeH','ลาดหน้าหิน','H : 1 V',2.5],['rockThickness','ความหนาหินเรียง','ม. ตั้งฉากลาด',.5],['sandMinThickness','ชั้นทรายขั้นต่ำจำลอง','ม. ตั้งฉากลาด',1],['walkwayWidth','ความกว้างทางเท้า','ม.',2.95],['toeTopWidth','สันตีนหินจำลอง','ม.',1.5],['toeDepth','ความลึกตีนหินจำลอง','ม. ฐานราบสมมติ',2],['toeSlopeH','ลาดข้างตีนหิน','H : 1 V',1.5],
+  ['length','ความยาวขยายรูปตัดทฤษฎี','ม. ไม่ใช่ช่วงสถานี',1000],['crestLevel','ระดับสันเขื่อน','ระดับสมมติ',101],['toeLevel','ระดับตีนเขื่อน','ระดับสมมติ',88],['slopeH','ลาดหน้าหิน','H : 1 V · ใช้ร่วมกับดิน',2.5],['rockThickness','ความหนาหินเรียง','ม. ตั้งฉากลาด',.5],['sandMinThickness','ชั้นทรายขั้นต่ำจำลอง','ม. ตั้งฉากลาด',1],['walkwayWidth','ความกว้างทางเท้า','ม.',2.95],['toeTopWidth','สันตีนหินจำลอง','ม.',1.5],['toeDepth','ความลึกตีนหินจำลอง','ม. ฐานราบสมมติ',2],['toeSlopeH','ลาดข้างตีนหิน','H : 1 V',1.5],
 ];
 
 function notice(message, error=false) {
@@ -35,16 +38,56 @@ function formFields() {
 }
 function renderModel() {
   const calc=calculateTypical(inputs);
-  $('#typical-drawing').innerHTML=typicalSectionSVG(inputs);
-  $('#model-drawing').innerHTML=typicalSectionSVG(inputs);
+  const sectionOptions=scenarioSectionOptions(activeScenario());
+  $('#typical-drawing').innerHTML=typicalSectionSVG(inputs,sectionOptions);
+  $('#model-drawing').innerHTML=typicalSectionSVG(inputs,sectionOptions);
   $('#typical-formulas').innerHTML='<table><thead><tr><th>รายการ</th><th>สูตร / การแทนค่า</th><th>ผล</th><th>หน่วย</th></tr></thead><tbody>'+calc.formulaRows.map(r=>'<tr><td>'+escape(r.label)+(r.assumption?'<small>'+escape(r.assumption)+'</small>':'')+'</td><td class="formula">'+escape(r.formula)+'<small>'+escape(r.substitution)+'</small></td><td class="num">'+format(r.value,4)+'</td><td>'+unit(r.unit)+'</td></tr>').join('')+'</tbody></table>';
   const changed=Object.keys(DEFAULT_INPUTS).some(k=>inputs[k]!==DEFAULT_INPUTS[k]);
   $('#geometry-status').textContent=changed?'ปรับมิติแล้ว · ค่าทฤษฎีเปลี่ยน / ข้อมูลต้นฉบับคงเดิม':'ค่าตั้งต้นตามแบบและสมมติฐานของเดโม่';
+  $('#active-slope').textContent=format(inputs.slopeH,3);
+  $('#active-levels').textContent='สัน '+format(inputs.crestLevel,2)+' ถึงตีน '+format(inputs.toeLevel,2)+' · สถานการณ์ที่เลือก';
   scene?.update(inputs);
 }
 function applyInputs(next){
-  const validation=validateInputs(next);if(!validation.valid)throw new Error('มิติต้องเป็นตัวเลขในช่วงที่กำหนด และระดับสันต้องสูงกว่าตีน: '+validation.errors.join(' '));
-  Object.assign(inputs,next);formFields();renderModel();
+  applyProject(updateActiveScenario(project,{geometry:next},source));
+}
+function persistProject(){
+  try{saveWorkingProject(project,source,window.localStorage);$('#persistence-status').textContent='เก็บงานล่าสุดในเบราว์เซอร์แล้ว · บันทึก JSON เพื่อเก็บหรือย้ายเครื่อง';$('#persistence-status').classList.remove('error');}
+  catch{$('#persistence-status').textContent='เบราว์เซอร์เก็บงานอัตโนมัติไม่ได้ กรุณาบันทึกโครงการ JSON ก่อนปิดหน้า';$('#persistence-status').classList.add('error');}
+}
+function renderProjectContext(){
+  const scenario=activeScenario(),row=catalog.find(s=>s.id===project.selectedStationId);
+  $('#station-select').value=project.selectedStationId;
+  $('#station-context').textContent=row.reach+' / STA '+station(row.station)+' · '+row.sourceSheet+' แถว '+row.sourceRow+' · ความยาวรับผิดชอบใน BOQ '+format(row.effectiveLength)+' ม.';
+  $('#project-revision').textContent=projectRevision(project);
+  $('#scenario-revision').textContent=scenarioRevision(scenario);
+  $('#external-analysis-status').textContent=isBaselineScenario(scenario)?'รูปตัดและค่าทดลองเริ่มต้น · Slope/W เดิมเป็นหลักฐานภายนอก ยังไม่ยืนยันผลของสถานีนี้':'สถานการณ์มีการแก้ไข · ต้องวิเคราะห์เสถียรภาพรวมใหม่ก่อนใช้ผลกับแบบนี้';
+  for(const field of $('#context-form').elements){if(field.name&&Object.hasOwn(scenario.context,field.name))field.value=scenario.context[field.name]??'';}
+  const missing=[];
+  if(!scenario.context.boreholeReference.trim())missing.push('ยังไม่ได้จับคู่หลุมเจาะ');
+  if([scenario.context.waterHighLevel,scenario.context.waterLowLevel,scenario.context.groundwaterLevel].some(v=>v===null))missing.push('ระดับน้ำยังไม่ครบ');
+  if([scenario.context.waterHighLevel,scenario.context.waterLowLevel,scenario.context.groundwaterLevel].some(v=>v!==null)&&!scenario.context.waterReference.trim())missing.push('ระดับน้ำที่กรอกยังไม่มีแหล่งอ้างอิง');
+  $('#context-status').textContent=missing.length?missing.join(' · '):'บันทึกบริบทแล้ว · ข้อมูลที่กรอกยังต้องตรวจยืนยันกับเอกสารและหน้าตัดจริง';
+  const index=catalog.findIndex(s=>s.id===project.selectedStationId);
+  $('#previous-station').disabled=index===0;$('#next-station').disabled=index===catalog.length-1;
+}
+function applyProject(next,{persist=true}={}){
+  project=next;inputs=activeScenario().geometry;
+  formFields();renderModel();renderProjectContext();engineeringView?.render();renderStations();
+  if(persist)persistProject();
+}
+function saveProject(){
+  if(!project){notice('ข้อมูลโครงการยังไม่พร้อม',true);return;}
+  download('S6006-project.json',serializeProject(project,source)+'\n','application/json');
+  notice('บันทึกโครงการเดียวแล้ว: สถานี มิติ คาน ดิน ระดับน้ำ และที่มาของค่าทุกสถานีที่แก้');
+}
+function changeStation(id){
+  applyProject(selectStation(project,id,source));
+  $('#notice').hidden=true;
+}
+function setProjectControlsEnabled(enabled){
+  for(const control of document.querySelectorAll('button,input,select,textarea'))control.disabled=!enabled;
+  if(enabled)renderProjectContext();
 }
 function renderSummary(){
   const rows=Object.entries(audit.composedTotals).map(([key,r])=>'<tr><td>'+escape(AGGREGATE_LABELS[key]||key)+'</td><td class="num">'+format(r.sourceAdoptedValue,0)+'</td><td class="num">'+format(r.roundedDownKnownValue,0)+'</td><td class="num delta">'+format(r.deltaRoundedKnownToSourceAdopted,0)+'</td><td>'+unit(r.unit)+'</td><td><span class="status '+(r.complete?'':'amber')+'">'+(r.complete?'ข้อมูลตั้งต้นครบ':'ยอดเฉพาะค่าที่ทราบ')+'</span><small>'+(r.complete?'':r.missingCount+' ค่าตั้งต้นว่าง · ')+r.sourceMissingCount+' ผลคูณเดิมว่าง</small></td></tr>');
@@ -64,11 +107,12 @@ function renderStations(){
   $('#station-table tbody').innerHTML=audit.rows.map(row=>{
     const m=row.measures.find(x=>x.key===key);
     const delta=m.contribution===null||m.cachedProduct===null?null:m.contribution-m.cachedProduct;
-    return '<tr><td>'+row.reach+' / '+station(row.station)+'</td><td class="num">'+format(row.effectiveLength)+'</td><td class="num">'+format(m.value,4)+'<small>'+unit(m.inputUnit)+(m.depthMultiplier?' × '+m.depthMultiplier+' ม.':'')+'</small></td><td class="num">'+format(m.cachedProduct,4)+'</td><td class="num">'+format(m.contribution,4)+'</td><td class="num">'+format(delta,4)+'</td><td><code>'+m.valueCell+' × '+row.lengthCell+(m.multiplierCell?' × '+m.multiplierCell:'')+'</code><small>ผลเดิม '+m.productCell+'</small></td><td><span class="status '+(m.value===null||m.cachedProduct===null?'amber':'')+'">'+statusText(m)+'</span></td></tr>';
+    const stationId=catalog.find(s=>s.reach===row.reach&&s.sourceRow===row.sourceRow)?.id;
+    return '<tr'+(stationId===project.selectedStationId?' class="selected-station"':'')+'><td><button type="button" class="text-button station-link" data-station-id="'+escape(stationId)+'" aria-label="เลือกสถานี '+station(row.station)+' ช่วง '+escape(row.reach)+'">'+row.reach+' / '+station(row.station)+'</button></td><td class="num">'+format(row.effectiveLength)+'</td><td class="num">'+format(m.value,4)+'<small>'+unit(m.inputUnit)+(m.depthMultiplier?' × '+m.depthMultiplier+' ม.':'')+'</small></td><td class="num">'+format(m.cachedProduct,4)+'</td><td class="num">'+format(m.contribution,4)+'</td><td class="num">'+format(delta,4)+'</td><td><code>'+m.valueCell+' × '+row.lengthCell+(m.multiplierCell?' × '+m.multiplierCell:'')+'</code><small>ผลเดิม '+m.productCell+'</small></td><td><span class="status '+(m.value===null||m.cachedProduct===null?'amber':'')+'">'+statusText(m)+'</span></td></tr>';
   }).join('');
 }
 function renderBasis(){
-  $('#basis-content').innerHTML='<div class="section-title"><div><p class="eyebrow">ENGINEERING BASIS</p><h2>จากเอกสารถึงผลที่ตรวจสอบได้</h2><p>แยกหลักฐานต้นฉบับ การคำนวณซ้ำ และขอบเขตแบบจำลองอย่างชัดเจน</p></div><a class="button primary" href="report.html" target="_blank" rel="noopener">รายการคำนวณฉบับเต็ม ↗</a></div>'
+  $('#basis-content').innerHTML='<div class="section-title"><div><p class="eyebrow">ENGINEERING BASIS</p><h2>จากเอกสารถึงผลที่ตรวจสอบได้</h2><p>แยกหลักฐานต้นฉบับ การคำนวณซ้ำ และขอบเขตแบบจำลองอย่างชัดเจน</p></div><button type="button" class="button primary" data-current-report>รายการคำนวณฉบับเต็ม ↗</button></div>'
     +'<div class="two-col"><article class="card"><h2>ขอบเขตและระดับอ้างอิง</h2><p>เดโม่เลือก BOQ ปัจจุบัน 1,000 ม. จากช่วง 286 + 714 ม. แบบ ST-01 ระบุปลายโครงการ 1+195 ส่วนตารางเก่ามี 222 ม. เพิ่มเป็น 1,222 ม. ต้องยืนยันรุ่นและขอบเขตก่อนใช้งานจริง</p><p>BM1: ระดับจริง 164.060 / สมมติ 100.010 และ BM2: 164.050 / 100.000 ให้ส่วนต่าง 64.050 ม. การแสดงรูปตัดใช้ระดับสมมติในแบบ ไม่แปลงระดับน้ำที่พิมพ์ปัดเศษโดยอัตโนมัติ</p><a href="'+sourceURL('S-DWG')+'" target="_blank" rel="noopener">แบบ ST-01 · PDF หน้า 5 ↗</a></article><article class="card"><h2>อะไรคือสมมติฐานของโมเดล</h2><p>ความหนาหินและทรายวัดตั้งฉากกับลาด ตีนหินใช้รูปคางหมูสมมาตรฐานราบลึก 2 ม. เพื่อคำนวณตัวอย่าง ทั้งที่ตีนจริงเปลี่ยนตามท้องน้ำ ภาพ 3D ใช้ช่วงตรง 100 ม. ไม่มีแนวพิกัดและผิวดินสำรวจที่สร้างขึ้นเอง</p><p>ไม่รวมปริมาตรต่างชนิดเป็นยอดวัสดุรวม และไม่อ้างปริมาณองค์ประกอบทฤษฎีเป็น BOQ สุทธิ</p><a href="'+sourceURL('S-DWG')+'" target="_blank" rel="noopener">แบบ SD-02 · PDF หน้า 36 ↗</a></article></div>'
     +'<article class="card"><div class="card-head"><h2>ผลเสถียรภาพในรายงาน Slope/W เดิม</h2><span class="status amber">ข้อมูลอ้างอิงจากภายนอก</span></div><div class="table-wrap"><table id="reported-fs"><thead><tr><th>กรณีเดิม</th><th>FS ที่รายงาน</th><th>เกณฑ์ในรายงาน</th><th>อ้างอิง</th><th>ขอบเขต</th></tr></thead><tbody>'+REPORTED_FS.map(r=>'<tr><td>'+r.case+'</td><td class="num">'+r.value.toFixed(3)+'</td><td class="num">'+r.criterion.toFixed(1)+'</td><td>PDF หน้า '+r.page+'</td><td>'+r.note+'</td></tr>').join('')+'</tbody></table></div><p class="engineering-note">ยังไม่ได้สร้างแบบจำลอง Slope/W เดิมซ้ำ จึงไม่ใช้ตัวเลขเหล่านี้รับรองมิติที่ผู้ใช้แก้ ค่า FS จากโมดูลลาดอนันต์เป็นคนละกลไกและคนละสมมติฐาน</p></article>'
     +'<article class="card"><h2>พารามิเตอร์ดินในเอกสารเดิม</h2><div class="table-wrap"><table><thead><tr><th>วัสดุ</th><th>γ (kN/m³)</th><th>c ตามหัวตาราง (kPa)</th><th>φ ตามหัวตาราง (°)</th></tr></thead><tbody>'+SOIL_SOURCE.map(r=>'<tr>'+r.map((v,i)=>'<td'+(i?' class="num"':'')+'>'+(v===null?'—':v)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div><p>แหล่ง: รายการคำนวณ หน้า 16 · เครื่องหมายขีดเก็บเป็นข้อมูลที่ไม่ได้ระบุ ไม่เปลี่ยนเป็นศูนย์โดยอัตโนมัติ ต้องยืนยันว่า c เป็น Su หรือ c′ และใช้กับเงื่อนไขระบายน้ำใดก่อนวิเคราะห์จริง</p></article>'
@@ -100,26 +144,60 @@ $('#geometry-form').addEventListener('change',event=>{
 });
 $('#reset-model').addEventListener('click',()=>{applyInputs({...DEFAULT_INPUTS});notice('คืนค่าหน้าตัดตามแบบและสมมติฐานตั้งต้นแล้ว');});
 $('#measure-select').addEventListener('change',renderStations);
-$('#save-case').addEventListener('click',()=>download('S6006-demo-case.json',JSON.stringify({schema:'riverbank.s6006.case',version:1,projectCode:'S6006',inputs},null,2)+'\n','application/json'));
+$('#save-case').addEventListener('click',saveProject);
 $('#load-case').addEventListener('click',()=>$('#case-file').click());
 $('#case-file').addEventListener('change',async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
   try{
-    if(file.size>100000)throw new Error('ไฟล์โครงการมีขนาดเกิน 100 KB');
-    const data=JSON.parse(await file.text());
-    if(!data||Array.isArray(data)||data.schema!=='riverbank.s6006.case'||data.version!==1||data.projectCode!=='S6006'||Object.keys(data).sort().join(',')!=='inputs,projectCode,schema,version')throw new Error('รูปแบบไฟล์ไม่ตรง S6006 case version 1');
-    applyInputs(data.inputs);notice('เปิดมิติหน้าตัดจากไฟล์แล้ว ข้อมูลอ้างอิง 41 สถานียังเป็นชุดเดิม');
+    if(file.size>PROJECT_MAX_BYTES)throw new Error('ไฟล์โครงการมีขนาดเกิน 1 MiB');
+    const parsed=parseProject(await file.text(),source);
+    applyProject(parsed.project);notice('เปิดโครงการครบจากไฟล์แล้ว · '+(parsed.notices.length?parsed.notices.join(' '):'มิติ คาน ดิน น้ำ และสถานีตรงกับข้อมูลที่บันทึก'));
   }catch(error){notice('เปิดไฟล์ไม่ได้: '+error.message,true);}
 });
 $('#export-quantity').addEventListener('click',exportQuantities);
-$('#export-section').addEventListener('click',()=>download('S6006-typical-section.svg',typicalSectionSVG(inputs),'image/svg+xml'));
+$('#export-section').addEventListener('click',()=>download('S6006-'+project.selectedStationId+'-section.svg',typicalSectionSVG(inputs,scenarioSectionOptions(activeScenario())),'image/svg+xml'));
+$('#station-select').addEventListener('change',event=>changeStation(event.target.value));
+for(const [id,delta] of [['previous-station',-1],['next-station',1]])$('#'+id).addEventListener('click',()=>{const index=catalog.findIndex(s=>s.id===project.selectedStationId);if(catalog[index+delta])changeStation(catalog[index+delta].id);});
+$('#station-table').addEventListener('click',event=>{const button=event.target.closest('[data-station-id]');if(button)changeStation(button.dataset.stationId);});
+$('#context-form').addEventListener('submit',event=>event.preventDefault());
+$('#context-form').addEventListener('change',event=>{
+  const key=event.target.name,context=activeScenario().context;if(!Object.hasOwn(context,key))return;
+  const raw=event.target.value,value=event.target.type==='number'?(raw.trim()===''?null:Number(raw)):raw;
+  try{applyProject(updateActiveScenario(project,{context:{[key]:value}},source));$('#notice').hidden=true;}
+  catch(error){event.target.value=context[key]??'';notice('บันทึกบริบทไม่ได้: '+error.message,true);}
+});
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-current-report]');if(!button)return;
+  try{
+    // Explicit action buttons cannot open an unprepared baseline via middle-click.
+    const snapshot=saveReportSnapshot(project,source,window.localStorage);
+    window.open(snapshot.url,'_blank','noopener');
+    notice('เตรียมรายงานจากรุ่น '+snapshot.revision+' แล้ว หากแท็บใหม่ไม่เปิด ให้กดลิงก์นี้: ');
+    const link=document.createElement('a');link.href=snapshot.url;link.target='_blank';link.rel='noopener';link.textContent='เปิดรายงานของรุ่นนี้ ↗';$('#notice').append(link);
+  }catch(error){event.preventDefault();notice('เปิดรายงานไม่ได้: '+error.message+' กรุณาบันทึกโครงการ JSON ไว้ก่อน',true);}
+});
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{scene?.setView(b.dataset.view);document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x===b));}));
 $('#fit-scene').addEventListener('click',()=>scene?.fit());
+setProjectControlsEnabled(false);
 try{
   const response=await fetch('source-data.json');if(!response.ok)throw new Error('โหลดชุดข้อมูลไม่สำเร็จ');source=await response.json();
   normalized=normalizeSourceRows(source);audit=auditSourceQuantities(source);if(audit.errors.length)throw new Error(audit.errors.join('; '));
-  formFields();renderModel();renderSummary();renderBasis();renderKnowledge();
-  mountEngineering($('#engineering-content'));
+  catalog=stationCatalog(source);project=createProject(source);
+  $('#station-select').innerHTML=catalog.map(row=>'<option value="'+row.id+'">'+row.reach+' · STA '+station(row.station)+'</option>').join('');
+  let restored=false,restoreError='';
+  try{const saved=loadWorkingProject(source,window.localStorage);if(saved){project=saved.project;restored=true;}}
+  catch(error){restoreError=error.message;}
+  inputs=activeScenario().geometry;
+  renderSummary();renderBasis();renderKnowledge();
+  engineeringView=mountEngineering($('#engineering-content'),{
+    getScenario:activeScenario,getRevision:()=>scenarioRevision(activeScenario()),
+    onChange:(section,patch)=>applyProject(updateActiveScenario(project,{[section]:patch},source)),onSave:saveProject,
+  });
+  applyProject(project,{persist:false});
+  if(restoreError){notice('เปิดงานล่าสุดในเบราว์เซอร์ไม่ได้: '+restoreError+' ขณะนี้แสดงชุดเริ่มต้น กรุณาเปิดไฟล์โครงการที่บันทึกไว้',true);$('#persistence-status').textContent='งานล่าสุดยังไม่ได้โหลด · โปรดเปิดไฟล์โครงการ JSON';}
+  else if(restored){notice('กลับมาที่โครงการและสถานีที่แก้ล่าสุดแล้ว');$('#persistence-status').textContent='เปิดงานล่าสุดจากเบราว์เซอร์แล้ว · บันทึก JSON เพื่อเก็บหรือย้ายเครื่อง';}
+  else $('#persistence-status').textContent='โครงการเริ่มต้น · การแก้ไขจะเก็บในเบราว์เซอร์ และบันทึกทุกสถานีเป็น JSON ไฟล์เดียวได้';
   scene=mountCaseScene($('#case-scene'),inputs);await scene.ready;
+  setProjectControlsEnabled(true);
   document.body.dataset.ready='true';
-}catch(error){notice('ไม่สามารถเปิดโครงการได้ครบ: '+error.message,true);document.body.dataset.ready='error';}
+}catch(error){setProjectControlsEnabled(false);notice('ไม่สามารถเปิดโครงการได้ครบ: '+error.message,true);document.body.dataset.ready='error';}

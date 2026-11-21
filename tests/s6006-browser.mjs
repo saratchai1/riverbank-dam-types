@@ -2,6 +2,17 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { getActiveScenario, getSoilInputs } from '../projects/s6006/project.js';
+import { calculateBeam, calculateSoil } from '../projects/s6006/engineering.js';
+
+async function readEngineeringProject(file) {
+  const project=JSON.parse(await readFile(file,'utf8'));
+  assert.equal(project.schema,'riverbank.s6006.project');
+  assert.equal(Object.hasOwn(project,'beamResults'),false,'Stored results are never treated as authoritative');
+  const scenario=getActiveScenario(project),soilInputs=getSoilInputs(scenario);
+  let soilResults=null;try{soilResults=calculateSoil(soilInputs);}catch{ /* Explicit incomplete Su is retained. */ }
+  return {...project,beamInputs:scenario.beamInputs,soilInputs,beamResults:calculateBeam(scenario.beamInputs),soilResults};
+}
 
 // Runs only in the existing CI Playwright harness. The checked source fixture is
 // deliberately distinct from the editable ideal-section model.
@@ -104,7 +115,7 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     assertNoErrors(diagnostics);
   });
 
-  await check('S6006 edits only the ideal geometry, rejects invalid levels and round-trips the case JSON', async () => {
+  await check('S6006 edits shared geometry, rejects invalid levels and round-trips the unified project JSON', async () => {
     await panel(page, 'model');
     await changeValue(page, '#geometry-form [name="slopeH"]', 2);
     await changeValue(page, '#geometry-form [name="length"]', 500);
@@ -121,9 +132,11 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     assert.doesNotMatch(await page.locator('#model-drawing svg').getAttribute('viewBox'), /NaN|Infinity/);
     savedCase = await download(page, '#save-case', 's6006-edited-case.json');
     const saved = JSON.parse(await readFile(savedCase, 'utf8'));
-    assert.equal(saved.schema, 'riverbank.s6006.case');
+    assert.equal(saved.schema, 'riverbank.s6006.project');
     assert.equal(saved.version, 1); assert.equal(saved.projectCode, 'S6006');
-    assert.equal(saved.inputs.slopeH, 2); assert.equal(saved.inputs.length, 500);
+    assert.equal(getActiveScenario(saved).geometry.slopeH, 2); assert.equal(getActiveScenario(saved).geometry.length, 500);
+    assert.equal(getSoilInputs(getActiveScenario(saved)).slopeH,2);
+    assert.equal(Object.hasOwn(getActiveScenario(saved).soilInputs,'slopeH'),false,'Slope has one stored owner');
     await page.locator('#reset-model').click();
     assert.equal(await page.locator('#geometry-form [name="slopeH"]').inputValue(), '2.5');
     assert.equal(await page.locator('#model-drawing [data-component="facing-rock"]').getAttribute('points'), originalFace);
@@ -134,7 +147,8 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await screenshot(page, 's6006-model-edited-desktop.png', false);
 
     const bad = path.join(fixtures, 's6006-invalid-case.json');
-    await writeFile(bad, JSON.stringify({ ...saved, inputs: { ...saved.inputs, rockThickness: -1 } }));
+    const invalid=structuredClone(saved);invalid.stationScenarios[saved.selectedStationId].geometry.rockThickness=-1;
+    await writeFile(bad, JSON.stringify(invalid));
     await chooseFile(page, '#load-case', bad);
     await page.waitForFunction(() => document.querySelector('#notice')?.textContent.includes('เปิดไฟล์ไม่ได้'));
     assert.equal(await page.locator('#geometry-form [name="rockThickness"]').inputValue(), '0.5');
@@ -179,8 +193,10 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
   await check('S6006 computes beam capacity and soil cases while preserving unknown actual demand and Su', async () => {
     await panel(page, 'engineering');
     const baselinePath = await download(page, '#save-engineering', 's6006-engineering-baseline.json');
-    const baseline = JSON.parse(await readFile(baselinePath, 'utf8'));
-    assert.equal(baseline.schema, 'riverbank.s6006.engineering');
+    const baseline = await readEngineeringProject(baselinePath);
+    assert.equal(baseline.schema, 'riverbank.s6006.project');
+    assert.equal(baseline.soilInputs.slopeH,2,'Geometry slope from the preceding edit reaches the soil module');
+    assert.equal(await page.locator('#soil-form [name="slopeH"]').inputValue(),'2');
     assert.equal(baseline.beamInputs.externalMuKnM, null);
     assert.equal(baseline.beamInputs.externalVuKn, null);
     assert.equal(baseline.beamResults.checks.find(c => c.id === 'external-moment')?.status, 'pending');
@@ -195,7 +211,7 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await changeValue(page, '#beam-form [name="coverMm"]', 50);
     await changeValue(page, '#beam-form [name="externalMuKnM"]', 100);
     const editedPath = await download(page, '#save-engineering', 's6006-engineering-overload.json');
-    const edited = JSON.parse(await readFile(editedPath, 'utf8'));
+    const edited = await readEngineeringProject(editedPath);
     assert.equal(edited.beamInputs.coverMm, 50);
     assert.ok(edited.beamResults.phiMnKnM < baseline.beamResults.phiMnKnM, 'Greater cover reduces effective depth and this fixed-steel flexural capacity');
     assert.equal(edited.beamInputs.externalMuKnM, 100);
@@ -211,13 +227,13 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     assert.match(await page.locator('#soil-output').innerText(), /ยังคำนวณไม่ได้/);
     assert.match(await page.locator('#engineering-notice').innerText(), /กรุณากรอก Su/);
     const missingPath = await download(page, '#save-engineering', 's6006-engineering-missing-su.json');
-    const missing = JSON.parse(await readFile(missingPath, 'utf8'));
+    const missing = await readEngineeringProject(missingPath);
     assert.equal(missing.soilInputs.undrainedStrengthKpa, null);
     assert.equal(missing.soilResults, null, 'Missing Su is exported as missing, never zero strength');
     await changeValue(page, '#soil-form [name="undrainedStrengthKpa"]', 30);
     assert.equal(await page.locator('#soil-results tbody tr').count(), 1);
     const suPath = await download(page, '#save-engineering', 's6006-engineering-su30.json');
-    const su = JSON.parse(await readFile(suPath, 'utf8'));
+    const su = await readEngineeringProject(suPath);
     assert.equal(su.soilInputs.mode, 'undrained'); assert.equal(su.soilInputs.undrainedStrengthKpa, 30);
     assert.equal(su.soilResults.cases.length, 1);
     assert.ok(Number.isFinite(su.soilResults.cases[0].factorOfSafety) && su.soilResults.cases[0].factorOfSafety > 0);
@@ -237,7 +253,7 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await page.locator('#reset-soil').click();
     await changeValue(page, '#beam-form [name="externalMuKnM"]', 30);
     const gatedPath = await download(page, '#save-engineering', 's6006-engineering-gated-moment.json');
-    const gated = JSON.parse(await readFile(gatedPath, 'utf8'));
+    const gated = await readEngineeringProject(gatedPath);
     assert.equal(gated.calculationRevision, 'S6006-R2');
     assert.ok(gated.beamResults.phiMnKnM > 30, 'Intermediate strength alone would exceed the entered demand');
     assert.equal(gated.beamResults.usablePhiMnKnM, null, 'Minimum steel remains an unresolved gate');
@@ -248,7 +264,7 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await changeValue(page, '#beam-form [name="tensionBarDiameterMm"]', 16);
     await changeValue(page, '#beam-form [name="stirrupDiameterMm"]', 8);
     const detailedPath = await download(page, '#save-engineering', 's6006-engineering-detailed-section.json');
-    const detailed = JSON.parse(await readFile(detailedPath, 'utf8'));
+    const detailed = await readEngineeringProject(detailedPath);
     assert.ok(detailed.beamResults.usablePhiMnKnM > 30);
     assert.equal(detailed.beamResults.checks.find(c => c.id === 'external-moment').status, 'satisfied');
     assert.equal(detailed.beamResults.projectApproved, false, 'A component check never approves the project');
@@ -276,6 +292,118 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     await assertNoOverflow(page, 'S6006 engineering desktop');
     await screenshot(page, 's6006-engineering-desktop.png', false);
     assertNoErrors(diagnostics);
+  });
+
+  let unifiedFile,reportSnapshotPage,reportSnapshotURL,reportSnapshotRevision,reportScenarioText;
+  await check('S6006 shares slope in both directions and retains independent station scenarios across save, reload and import',async()=>{
+    await panel(page,'engineering');
+    await changeValue(page,'#soil-form [name="slopeH"]',3.25);
+    await changeValue(page,'#soil-form [name="frictionAngleDeg"]',35);
+    await changeValue(page,'#beam-form [name="tensionBarDiameterMm"]',16);
+    await changeValue(page,'#beam-form [name="stirrupDiameterMm"]',8);
+    await changeValue(page,'#beam-form [name="externalMuKnM"]',30);
+    await panel(page,'model');
+    assert.equal(await page.locator('#geometry-form [name="slopeH"]').inputValue(),'3.25');
+    assert.match(await page.locator('#model-drawing').innerText(),/ลาด 3\.25H/);
+    await changeValue(page,'#geometry-form [name="slopeH"]',3.5);
+    await panel(page,'engineering');
+    assert.equal(await page.locator('#soil-form [name="slopeH"]').inputValue(),'3.5');
+    await page.locator('.context-details summary').click();
+    await changeValue(page,'#context-form [name="waterHighLevel"]',99.5);
+    await changeValue(page,'#context-form [name="waterLowLevel"]',90.5);
+    await changeValue(page,'#context-form [name="groundwaterLevel"]',97.5);
+    await changeValue(page,'#context-form [name="waterReference"]','สำรวจสาธิต 21-11-2569 / ระดับสมมติ');
+    await changeValue(page,'#context-form [name="boreholeReference"]','BH-TEST-01 / หน้า 7 / สมมติฐานทดสอบ');
+    await changeValue(page,'#context-form [name="sourceNote"]','แรงคานทดสอบ 30 kN·m; φ′=35° เป็นสถานการณ์ทดสอบ');
+    const firstStation=await page.locator('#station-select').inputValue();
+    const revision=await page.locator('#project-revision').innerText();
+    await page.locator('#next-station').click();
+    const secondStation=await page.locator('#station-select').inputValue();
+    assert.notEqual(secondStation,firstStation);
+    assert.equal(await page.locator('#project-revision').innerText(),revision,'Selection alone does not invalidate the full-project revision');
+    assert.equal(await page.locator('#soil-form [name="slopeH"]').inputValue(),'2.5');
+    assert.equal(await page.locator('#beam-form [name="externalMuKnM"]').inputValue(),'');
+    assert.equal(await page.locator('#context-form [name="waterHighLevel"]').inputValue(),'');
+    await changeValue(page,'#beam-form [name="heightMm"]',600);
+    await page.locator('#soil-form [name="mode"]').selectOption('undrained');
+    await changeValue(page,'#soil-form [name="undrainedStrengthKpa"]',30);
+    unifiedFile=await download(page,'#save-case','s6006-unified-two-stations.json');
+    const unified=JSON.parse(await readFile(unifiedFile,'utf8'));
+    assert.equal(Object.keys(unified.stationScenarios).length,2);
+    assert.equal(unified.stationScenarios[firstStation].geometry.slopeH,3.5);
+    assert.equal(unified.stationScenarios[firstStation].beamInputs.externalMuKnM,30);
+    assert.equal(unified.stationScenarios[firstStation].context.waterHighLevel,99.5);
+    assert.equal(unified.stationScenarios[secondStation].soilInputs.undrainedStrengthKpa,30);
+    await page.reload();await waitReady(page);
+    assert.equal(await page.locator('#station-select').inputValue(),secondStation);
+    await panel(page,'engineering');
+    assert.equal(await page.locator('#beam-form [name="heightMm"]').inputValue(),'600');
+    assert.equal(await page.locator('#soil-form [name="undrainedStrengthKpa"]').inputValue(),'30');
+    await page.locator('#previous-station').click();
+    assert.equal(await page.locator('#soil-form [name="slopeH"]').inputValue(),'3.5');
+    assert.equal(await page.locator('#beam-form [name="externalMuKnM"]').inputValue(),'30');
+    assert.equal(await page.locator('#context-form [name="boreholeReference"]').inputValue(),'BH-TEST-01 / หน้า 7 / สมมติฐานทดสอบ');
+    await chooseFile(page,'#load-case',unifiedFile);
+    await page.waitForFunction(id=>document.querySelector('#station-select')?.value===id,secondStation);
+    assert.equal(await page.locator('#beam-form [name="heightMm"]').inputValue(),'600');
+    await page.locator('#previous-station').click();
+    await panel(page,'overview');
+    assert.match(await page.locator('#typical-drawing').innerText(),/น้ำสูง 99\.50 \(บริบทผู้ใช้\)/);
+    assert.equal(await page.locator('#typical-drawing [data-water-key="groundwater"]').count(),1);
+    assert.match(await page.locator('#external-analysis-status').innerText(),/ต้องวิเคราะห์เสถียรภาพรวมใหม่/);
+    await assertNoOverflow(page,'S6006 unified project desktop');
+    await screenshot(page,'s6006-unified-station-desktop.png',false);
+    assertNoErrors(diagnostics);
+  });
+
+  await check('S6006 current report snapshots the selected inputs and remains unchanged after further project edits',async()=>{
+    reportSnapshotRevision=await page.locator('#project-revision').innerText();
+    const selected=await page.locator('#station-select').inputValue();
+    [reportSnapshotPage]=await Promise.all([page.waitForEvent('popup'),page.locator('.top-actions [data-current-report]').click()]);
+    await reportSnapshotPage.waitForFunction(()=>document.querySelector('#report-ready')?.dataset.ready==='true');
+    reportSnapshotURL=reportSnapshotPage.url();
+    assert.match(reportSnapshotURL,/snapshot=/);
+    assert.equal(await reportSnapshotPage.locator('#report-ready').getAttribute('data-mode'),'snapshot');
+    assert.equal(await reportSnapshotPage.locator('#report-ready').getAttribute('data-project-revision'),reportSnapshotRevision);
+    assert.equal(await reportSnapshotPage.locator('#report-ready').getAttribute('data-station-id'),selected);
+    reportScenarioText=await reportSnapshotPage.locator('#report-ready').innerText();
+    for(const marker of ['3.5','35','99.5','BH-TEST-01','Mu = 30','Ø16'])assert.ok(reportScenarioText.includes(marker),`Current report retains edited input ${marker}`);
+    assert.match(reportScenarioText,/ต้องวิเคราะห์ใหม่|ต้องวิเคราะห์เสถียรภาพรวมใหม่/);
+    assert.equal(await reportSnapshotPage.locator('#print-report').isEnabled(),true);
+    await panel(page,'model');
+    await changeValue(page,'#geometry-form [name="slopeH"]',4);
+    assert.notEqual(await page.locator('#project-revision').innerText(),reportSnapshotRevision);
+    await reportSnapshotPage.reload();
+    await reportSnapshotPage.waitForFunction(()=>document.querySelector('#report-ready')?.dataset.ready==='true');
+    assert.equal(await reportSnapshotPage.locator('#report-ready').innerText(),reportScenarioText,'Reloaded report keeps the frozen scenario, not the later working project');
+    await assertNoOverflow(reportSnapshotPage,'S6006 snapshot report desktop');
+    await screenshot(reportSnapshotPage,'s6006-current-scenario-report.png',false);
+    await reportSnapshotPage.emulateMedia({media:'print'});
+    await reportSnapshotPage.setViewportSize({width:680,height:1100});
+    const fits=await reportSnapshotPage.locator('.report-page').evaluateAll(pages=>pages.map((p,i)=>{
+      const bottom=Math.max(...[...p.children].filter(el=>!el.classList.contains('running-foot')).map(el=>el.getBoundingClientRect().bottom));
+      return {page:i+1,title:p.dataset.pageTitle,fits:bottom<=p.querySelector('.running-foot').getBoundingClientRect().top-2};
+    }));
+    assert.deepEqual(fits.filter(p=>!p.fits),[],'Current values must fit the printed report too');
+    await reportSnapshotPage.pdf({path:path.join(output,'S6006-current-scenario-calculations.pdf'),format:'A4',printBackground:true,preferCSSPageSize:true});
+    await reportSnapshotPage.emulateMedia({media:'screen'});
+    assertNoErrors(diagnostics);
+  });
+
+  await check('S6006 missing or corrupt report snapshots block results and printing without baseline substitution',async()=>{
+    const missing=await desktop.context.newPage();
+    await missing.goto(`${baseURL}/projects/s6006/report.html?snapshot=missing-snapshot-0001`);
+    await missing.waitForFunction(()=>document.body.dataset.reportState==='blocked');
+    assert.equal(await missing.locator('#print-report').isDisabled(),true);
+    assert.equal(await missing.locator('.report-page').count(),0);
+    assert.match(await missing.locator('#report-error').innerText(),/ไม่พบสำเนา/);
+    // Deliberately corrupt only this isolated test storage key, never production data.
+    await missing.evaluate(()=>localStorage.setItem('riverbank.s6006.report-snapshot.v1.corrupt-test-0001','{invalid'));
+    await missing.goto(`${baseURL}/projects/s6006/report.html?snapshot=corrupt-test-0001`);
+    await missing.waitForFunction(()=>document.body.dataset.reportState==='blocked');
+    assert.equal(await missing.locator('#print-report').isDisabled(),true);
+    assert.match(await missing.locator('#report-error').innerText(),/เสียหาย/);
+    await missing.close();await reportSnapshotPage.close();
   });
 
   const reportPage = await newPage('S6006 calculation report', { width: 1100, height: 1050 });
@@ -311,6 +439,24 @@ export async function runS6006Checks({ newPage, check, screenshot, assertNoError
     assert.ok(extracted.replace(/\s+/g, '').includes('บ้านแดนเมือง'), 'Project title survives PDF text extraction');
     for (const marker of ['S6006', '949.9875', 'T25']) assert.ok(extracted.includes(marker), `PDF retains ${marker}`);
     assertNoErrors(reportPage.diagnostics);
+  });
+
+  await check('S6006 controls stay disabled while source data is loading and after a source-data failure',async()=>{
+    const pending=await newPage('S6006 source failure',{width:1100,height:900});
+    let release,observed;
+    const hold=new Promise(resolve=>{release=resolve;});
+    const seen=new Promise(resolve=>{observed=resolve;});
+    await pending.page.route('**/projects/s6006/source-data.json',async route=>{observed();await hold;await route.fulfill({status:200,contentType:'application/json',body:'{invalid source'});});
+    await pending.page.goto(`${baseURL}/projects/s6006/`,{waitUntil:'commit'});
+    await seen;
+    for(const selector of ['#save-case','#load-case','#reset-model','#next-station','#station-select','.top-actions [data-current-report]'])assert.equal(await pending.page.locator(selector).isDisabled(),true);
+    release();
+    await pending.page.waitForFunction(()=>document.body.dataset.ready==='error');
+    assert.match(await pending.page.locator('#notice').innerText(),/ไม่สามารถเปิดโครงการ/);
+    assert.equal(await pending.page.locator('#save-case').isDisabled(),true);
+    assert.equal(await pending.page.locator('#context-form [name="waterHighLevel"]').isDisabled(),true);
+    assertNoErrors(pending.diagnostics);
+    await pending.context.close();
   });
 
   const mobile = await newPage('S6006 mobile', { width: 390, height: 844 }, true);
