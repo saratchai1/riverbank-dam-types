@@ -169,7 +169,7 @@ function renderInspector() {
       <h2>ส่งต่องานที่ตรวจได้</h2><p class="intro">ส่งรูปตัด ปริมาณ และข้อมูลโครงการ พร้อมสมมุติฐานเพื่อให้ทีมออกแบบทำงานต่อ</p>
       <section class="field-section"><h3 class="section-label">แบบและโมเดลแนวคิด</h3><div class="export-grid"><button data-export="dxf"><strong>DXF ↗</strong>รูปตัดสถานีนี้<small>เส้นและ layer · หน่วยเมตร</small></button><button data-export="svg"><strong>SVG ↗</strong>รูปตัดเวกเตอร์<small>ภาพพร้อมระดับและสถานะร่าง</small></button><button data-export="obj"><strong>OBJ ↗</strong>โมเดลโครงการ<small>แกน Z-up · หน่วยเมตร</small></button><button data-export="print"><strong>PDF / PRINT</strong>ใบทบทวนโครงการ<small>ผ่านหน้าพิมพ์ของเบราว์เซอร์</small></button></div></section>
       <section class="field-section"><h3 class="section-label">ตารางข้อมูล CSV</h3><div class="export-grid"><button data-export="quantity"><strong>QUANTITY</strong>ปริมาณและราคา<small>สูตร · สมมุติฐาน · แหล่งราคา</small></button><button data-export="survey"><strong>SURVEY</strong>รูปตัดสำรวจ<small>station · offset · elevation</small></button><button data-export="piles"><strong>PILES</strong>พิกัดเสาเข็ม<small>ตำแหน่งตามแนวและระดับ</small></button><button data-export="analysis"><strong>ANALYSIS</strong>ผลวิเคราะห์ที่บันทึก<small>แหล่งอ้างอิง · revision</small></button></div></section>
-      <div class="note-card">${missing ? `${missing} รายการยังกรอกราคาไม่ครบ ยอดด้านขวารวมเฉพาะรายการที่มีราคาแล้ว`:'กรอกราคาครบทุกรายการในขอบเขตแนวคิดแล้ว โปรดตรวจแหล่งราคา'}<br>ยังไม่ใช่ ปร.4 ฉบับสมบูรณ์</div>
+      <div class="note-card" id="price-completeness">${missing ? `${missing} รายการยังกรอกราคาไม่ครบ ยอดด้านขวารวมเฉพาะรายการที่มีราคาแล้ว`:'กรอกราคาครบทุกรายการในขอบเขตแนวคิดแล้ว โปรดตรวจแหล่งราคา'}<br>ยังไม่ใช่ ปร.4 ฉบับสมบูรณ์</div>
       <label class="field"><span>หมายเหตุโครงการ</span><textarea data-field="notes" maxlength="4000" rows="4" placeholder="ข้อมูลที่ต้องตรวจสอบหรือคำอธิบายเพิ่มเติม">${esc(p.notes)}</textarea></label>
       <button class="button primary full" data-export="json">บันทึกโครงการทั้งหมด · JSON ↓</button>
       <p class="field-help">เก็บแนว รูปตัด ดิน มิติ ราคา และผลวิเคราะห์ไว้เปิดแก้ไขต่อได้</p>`;
@@ -298,7 +298,8 @@ document.addEventListener('change',event=>{
     } else if(el.matches('[data-rate]')) {
       const key=el.dataset.rate,code=el.dataset.code;
       const value=key==='source'?el.value:el.value.trim()===''?null:numericInput(el);
-      commit(p=>{p.prices[code]??={material:null,labour:null,source:''};p.prices[code][key]=value;},null,{refreshInspector:false});
+      if(key!=='source'&&value!==null&&(value<0||value>1e12))throw new Error('ค่าวัสดุและค่าแรงต้องอยู่ระหว่าง 0–1,000,000,000,000 บาทต่อหน่วย หากยังไม่ทราบราคาให้เว้นว่าง');
+      commit(p=>{p.prices[code]??={material:null,labour:null,source:''};p.prices[code][key]=value;});
     } else if(el.id==='soil-select') {
       activeSoil=Number(el.value);renderInspector();
     } else if(el.matches('[data-layer]')) scene?.setLayer(el.dataset.layer,el.checked);

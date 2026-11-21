@@ -211,10 +211,13 @@ try {
     const row = page.locator(selector('material')).locator('xpath=ancestor::tr');
     const amount = await row.locator('td').last().innerText();
     assert.notEqual(amount, '—');
+    assert.match(await page.locator('#price-completeness').innerText(), /3 รายการยังกรอกราคาไม่ครบ/, 'Sidebar remaining count updates after one complete price');
     await changeValue(page, selector('material'), -1);
     await page.locator('#notice.error').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#notice.error').innerText(), /ค่าวัสดุและค่าแรง/, 'Price validation uses a human-facing Thai message');
     assert.equal(await page.locator(selector('material')).inputValue(), '2500');
     assert.equal(await row.locator('td').last().innerText(), amount);
+    assert.match(await page.locator('#price-completeness').innerText(), /3 รายการยังกรอกราคาไม่ครบ/, 'Rejected price preserves the sidebar remaining count');
     await screenshot(page, 'studio-export-desktop.png');
     const csv = await download(page, '[data-export="quantity"]', 'quantity-draft.csv');
     assert.ok((await readFile(csv, 'utf8')).length > 100, 'Quantity CSV contains data');
