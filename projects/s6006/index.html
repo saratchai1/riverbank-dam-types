@@ -6,6 +6,7 @@
   <meta name="description" content="โครงการสาธิตจากแบบจริง: รูปตัด ปริมาณ โครงสร้าง และดิน พร้อมที่มารายการคำนวณ">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="comparison-ui.css">
+  <link rel="stylesheet" href="review-ui.css">
   <script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
 </head>
 <body>
@@ -37,7 +38,7 @@
     </details>
   </section>
   <nav id="case-tabs" class="case-tabs" aria-label="ส่วนของโครงการ">
-    <button data-panel="overview" aria-current="page"><span>01</span> ภาพโครงการ</button><button data-panel="model"><span>02</span> ลองปรับหน้าตัด</button><button data-panel="quantities"><span>03</span> ตรวจปริมาณ</button><button data-panel="engineering"><span>04</span> โครงสร้างและดิน</button><button data-panel="basis"><span>05</span> ที่มาวิศวกรรม</button><button data-panel="knowledge"><span>06</span> รีวิวชุดแบบ</button><button data-panel="comparison"><span>07</span> เทียบทางเลือก</button>
+    <button data-panel="overview" aria-current="page"><span>01</span> ภาพโครงการ</button><button data-panel="model"><span>02</span> ลองปรับหน้าตัด</button><button data-panel="quantities"><span>03</span> ตรวจปริมาณ</button><button data-panel="engineering"><span>04</span> โครงสร้างและดิน</button><button data-panel="basis"><span>05</span> ที่มาวิศวกรรม</button><button data-panel="knowledge"><span>06</span> รีวิวชุดแบบ</button><button data-panel="comparison"><span>07</span> เทียบทางเลือก</button><button data-panel="review"><span>08</span> ตรวจงานวิศวกรรม</button>
   </nav>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <section id="panel-overview" class="panel">
@@ -52,7 +53,8 @@
   <section id="panel-basis" class="panel" hidden><div id="basis-content"></div></section>
   <section id="panel-knowledge" class="panel" hidden><div id="knowledge-content"></div></section>
   <section id="panel-comparison" class="panel" hidden><div id="comparison-content"></div></section>
-  <footer class="page-footer"><span>S6006 / Project alternatives 2 · สมการ R2 · ข้อมูลและสมมติฐานมีผลต่อคำตอบ</span><a href="../../studio.html">กลับ Studio</a><a href="../../index.html">คลังแบบ 5 ชนิด</a><button type="button" class="text-button" data-current-report>เปิดรายการคำนวณฉบับเต็ม ↗</button></footer>
+  <section id="panel-review" class="panel" hidden><div id="review-content"></div></section>
+  <footer class="page-footer"><span>S6006 / Engineering review 1 · สมการ R2 · ข้อมูลและสมมติฐานมีผลต่อคำตอบ</span><a href="../../studio.html">กลับ Studio</a><a href="../../index.html">คลังแบบ 5 ชนิด</a><button type="button" class="text-button" data-current-report>เปิดรายการคำนวณฉบับเต็ม ↗</button></footer>
 </main>
 <input id="case-file" type="file" accept=".json,application/json" hidden>
 <script type="module" src="app.js"></script>
