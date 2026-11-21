@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#12362f">
+  <meta name="description" content="พื้นที่ออกแบบเขื่อนป้องกันตลิ่งจากแนวสำรวจ หน้าตัด และข้อมูลดิน พร้อมปริมาณที่ตรวจสอบที่มาได้">
+  <title>Riverbank Studio · ออกแบบโครงการ</title>
+  <link rel="stylesheet" href="studio/style.css">
+  <script type="importmap">
+  {"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}
+  </script>
+</head>
+<body>
+  <a href="#inspector" class="skip-link">ข้ามไปข้อมูลโครงการ</a>
+  <header class="app-header">
+    <a class="brand" href="studio.html" aria-label="Riverbank Studio หน้าหลัก">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 23 12 10h7l10 13M3 28h26M12 10v13m7-13v13M4 18h4m16 0h4"/></svg>
+      <span><strong>RIVERBANK<span>STUDIO</span></strong><small>พื้นที่ออกแบบเขื่อนป้องกันตลิ่ง</small></span>
+    </a>
+    <div class="header-context"><span class="draft-dot"></span>แบบร่างสำหรับพัฒนาแนวคิด</div>
+    <div class="header-actions">
+      <a class="header-link" href="index.html">คลังแบบ 5 ชนิด <span aria-hidden="true">↗</span></a>
+      <button id="open-project" class="header-button" type="button">เปิดโครงการ</button>
+      <button id="save-project" class="header-button primary" type="button">บันทึก JSON <span aria-hidden="true">↓</span></button>
+    </div>
+  </header>
+
+  <nav class="workflow" aria-label="ขั้นตอนออกแบบ">
+    <button data-step="survey" aria-current="step"><span class="step-number">01</span><span>สำรวจและแนวเขื่อน<small>ALIGNMENT & SURVEY</small></span></button>
+    <button data-step="soil"><span class="step-number">02</span><span>ข้อมูลดิน<small>GROUND CONDITIONS</small></span></button>
+    <button data-step="section"><span class="step-number">03</span><span>ออกแบบหน้าตัด<small>SECTION DESIGN</small></span></button>
+    <button data-step="review"><span class="step-number">04</span><span>ตรวจรูปตัดและผลวิเคราะห์<small>REVIEW & ANALYSIS</small></span></button>
+    <button data-step="export"><span class="step-number">05</span><span>ปริมาณและส่งออก<small>QUANTITIES & EXPORT</small></span></button>
+  </nav>
+
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <main class="workspace">
+    <aside class="inspector" id="inspector" tabindex="-1">
+      <div class="inspector-top"><span class="eyebrow" id="step-eyebrow">01 / PROJECT INPUT</span><button id="undo" class="text-button" disabled title="ย้อนการแก้ไขล่าสุด">↶ ย้อนกลับ</button></div>
+      <div id="inspector-content"></div>
+      <footer class="inspector-footer"><span id="save-status">ข้อมูลตัวอย่าง</span><button id="reset-demo" class="text-button">เปิดตัวอย่าง</button></footer>
+    </aside>
+
+    <section class="work-area" aria-label="แบบจำลองและรูปตัด">
+      <div class="project-bar">
+        <div><span class="eyebrow" id="project-code">RB-DEMO-001</span><h1 id="project-name">โครงการตัวอย่าง</h1></div>
+        <div class="project-metrics"><div><strong id="length-value">—</strong><small>ความยาวแนว · ม.</small></div><div><strong id="section-count">—</strong><small>รูปตัดสำรวจ</small></div><span id="source-badge" class="badge amber">ข้อมูลสาธิต</span></div>
+      </div>
+
+      <div id="visual-workspace">
+        <section class="scene-card" aria-label="แบบจำลองสามมิติจากหน้าตัดแนวคิด">
+          <div class="view-toolbar">
+            <div class="segmented" aria-label="มุมมอง"><button data-view="iso" class="selected">3D</button><button data-view="top">แปลน</button><button data-view="section">หน้าตัด</button></div>
+            <div class="view-actions"><details class="layers"><summary>ชั้นข้อมูล</summary><div><label><input type="checkbox" data-layer="structure" checked> โครงสร้าง</label><label><input type="checkbox" data-layer="piles" checked> เสาเข็ม</label><label><input type="checkbox" data-layer="ground" checked> สำรวจ</label><label><input type="checkbox" data-layer="water" checked> ระดับน้ำ</label></div></details><button id="fit-view" title="จัดภาพพอดีจอ">พอดีจอ ⛶</button></div>
+          </div>
+          <div id="scene" class="scene"><div class="scene-loading">กำลังสร้างแบบจำลอง…</div></div>
+          <div class="scene-caption"><span><i class="legend-line"></i> แบบจำลองหน้าตัดแนวคิดตามแนวโครงการ</span><span>ลากหมุน · ล้อเมาส์ซูม</span></div>
+        </section>
+
+        <section class="drawing-card">
+          <div class="drawing-heading"><div><span class="eyebrow">SECTION EXPLORER</span><h2>รูปตัดที่สถานี <span id="station-title">0+050</span></h2></div><div class="drawing-tabs"><button data-drawing="section" class="selected">รูปตัด</button><button data-drawing="profile">รูปตามยาว</button><button data-drawing="plan">แปลน</button></div></div>
+          <div class="station-control"><button id="previous-station" aria-label="สถานีก่อนหน้า">←</button><span id="station-min">0+000</span><input id="station-range" type="range" min="0" max="100" step="0.1" value="50" aria-label="เลือกสถานีหน้าตัด"><span id="station-max">0+100</span><button id="next-station" aria-label="สถานีถัดไป">→</button><label class="station-entry">STA<input id="station-input" value="0+050" aria-label="ระบุสถานี"></label></div>
+          <div id="drawing" class="drawing"></div>
+          <div class="drawing-foot"><span id="drawing-note">มาตราส่วนแกนเท่ากัน · หน่วยเมตร</span><button id="export-section-quick" class="text-button">บันทึกรูปตัด SVG ↗</button></div>
+        </section>
+      </div>
+
+      <section id="review-area" class="detail-area" hidden></section>
+      <section id="quantity-area" class="detail-area" hidden></section>
+      <footer class="workspace-note"><span class="draft-dot"></span> รูปแบบแนวคิดเป็นองค์ประกอบบางส่วนของแบบอ้างอิง · ปริมาณไม่รวมเหล็กเสริม งานดิน และองค์ประกอบที่ยังไม่ได้สร้าง</footer>
+    </section>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-title"><form method="dialog"><div class="dialog-header"><div><span class="eyebrow">ALIGNMENT IMPORT</span><h2 id="import-title">เลือกแนวเขื่อนจาก DXF</h2></div><button class="icon-button" value="cancel" aria-label="ปิด">×</button></div><div id="import-content"></div><div class="dialog-actions"><button value="cancel" class="button secondary">ยกเลิก</button><button type="button" id="apply-dxf" class="button primary">ใช้แนวที่เลือก</button></div></form></dialog>
+  <dialog id="demo-dialog" aria-labelledby="demo-title"><form method="dialog"><h2 id="demo-title">เปิดโครงการตัวอย่าง</h2><p>ข้อมูลปัจจุบันจะถูกแทนที่ด้วยตัวอย่าง คุณสามารถบันทึก JSON ก่อนเปลี่ยน หรือกดย้อนกลับหลังเปิดตัวอย่างได้</p><div class="dialog-actions"><button value="cancel" class="button secondary">ยกเลิก</button><button id="confirm-demo" type="button" class="button primary">เปิดตัวอย่าง</button></div></form></dialog>
+  <input id="file-project" type="file" accept=".json,application/json" hidden>
+  <input id="file-alignment" type="file" accept=".csv,.dxf" hidden>
+  <input id="file-survey" type="file" accept=".csv" hidden>
+  <input id="file-soil" type="file" accept=".csv" hidden>
+  <input id="file-analysis" type="file" accept=".csv" hidden>
+  <div id="print-report" class="print-report"></div>
+  <script type="module" src="studio/app.js"></script>
+</body>
+</html>
