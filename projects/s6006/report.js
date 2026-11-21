@@ -4,6 +4,7 @@ import {SOURCE_FILES,sourceURL,REPORTED_FS,SOIL_SOURCE,CASE_REVIEWS,QUESTIONS,ME
 import {engineeringReportSections} from './engineering-ui.js';
 import {getActiveScenario,getSoilInputs,stationCatalog,projectRevision,scenarioRevision,isBaselineScenario} from './project.js';
 import {loadReportProject} from './project-storage.js';
+import {buildInvestigationAppendix} from './investigation-report.js';
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const f=(value,d=3)=>value===null||value===undefined?'—':Number(value).toLocaleString('en-US',{maximumFractionDigits:d});
 const u=value=>({m:'ม.',m2:'ตร.ม.',m3:'ลบ.ม.',degree:'องศา'}[value]||value);
@@ -126,6 +127,7 @@ add('คำถามสำหรับวิศวกร 2', '<p class="eyebrow"
 
 add('แหล่งข้อมูลและการทดสอบ', '<p class="eyebrow">14 / REFERENCES & VERIFICATION</p><h2>เปิดแหล่งข้อมูลและตรวจซ้ำได้</h2>'+table(['รหัส / แหล่ง','ตำแหน่งและการใช้'],SOURCE_FILES.map(s=>['<a href="https://drive.google.com/file/d/'+s.id+'/view">'+s.key+' · '+s.title+'</a>',s.location+'<br><small>'+s.use+'</small>']),'source-table')+'<h3>ฐานสมการที่ค้นเพิ่มเติม</h3><ol>'+METHOD_SOURCES.map(s=>'<li><a href="'+s.url+'">'+s.title+'</a><br><span class="minor">'+s.location+' · '+s.use+'</span></li>').join('')+'</ol><h3>การตรวจความถูกต้องของซอฟต์แวร์</h3><p>ชุดทดสอบตรวจสูตรเรขาคณิตจากค่าที่คำนวณด้วยมือ ตรวจความยาวรวม 1,000 ม. ตรวจยอดและช่องว่างกับข้อมูลต้นฉบับ ตรวจการปัดลงแยกช่วง ตรวจหน่วย การรับข้อมูลผิดรูปแบบ และการคงค่าต้นฉบับเมื่อแก้มิติ รวมทั้งเกณฑ์ของโมดูลโครงสร้าง/ดินในขอบเขตที่ประกาศ</p><p>การทดสอบเบราว์เซอร์เปิดโมเดลและตารางจริง ตรวจการแก้มิติ ส่งออก–นำเข้า และการแสดงผลบนจอใหญ่/มือถือ รายงานผลทดสอบเก็บเป็นหลักฐานใน GitHub Actions ของ PR รุ่นนั้น</p><h3>ตำแหน่งโค้ดและข้อมูล</h3><p><a href="https://github.com/saratchai1/riverbank-dam-types">github.com/saratchai1/riverbank-dam-types</a><br><code>projects/s6006/engine.js</code> — รูปทรงและปริมาณ<br><code>projects/s6006/engineering.js</code> — โครงสร้างและดิน<br><code>projects/s6006/source-data.json</code> — ค่าที่อ่านจากต้นฉบับ<br><code>projects/s6006/source-fingerprints.json</code> — SHA-256 ของแหล่งหลัก<br><code>docs/source-review/</code> — บันทึกรีวิวและทะเบียน 179 ไฟล์</p><div class="note">ไฟล์ต้นฉบับจากผู้ใช้ไม่ได้ถูกรัน macro หรือแก้สูตรเดิม รายงานนี้เป็นการคำนวณและทบทวนที่แยกจากเอกสารออกแบบต้นฉบับ ผลตรวจต้องอ่านร่วมกับขอบเขตของแต่ละรายการ</div>');
 
+  pages.push(...buildInvestigationAppendix({project,source,entries:[{stationId:selected.id,scenarioId:'current'}]}));
   return {pages,metadata};
 }
 

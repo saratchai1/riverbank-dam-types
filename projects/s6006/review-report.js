@@ -1,4 +1,5 @@
 import { REVIEW_REVISION, buildReview, selectReview } from './review.js';
+import { buildInvestigationAppendix } from './investigation-report.js';
 import { loadReviewProject } from './review-storage.js';
 import { SOURCE_FILES, sourceURL } from './case-data.js';
 
@@ -249,6 +250,7 @@ export function buildReviewReportPages({ project, source, selection, createdAt, 
     + '<p class="review-intro">เอกสารเดิมให้ที่มาของค่าต้นแบบและสมการที่เลือก ข้อมูลที่แก้หรือข้อความที่ผู้ใช้บันทึกต้องตรวจยืนยันแยกตามรุ่นสถานการณ์</p>'
     + table(['รหัส', 'เอกสารและตำแหน่งอ้างอิง'], sources.map(item => [esc(item.id), safeSourceLink(item) + '<br><span class="minor">' + esc(item.sections || '') + '</span>']), 'review-sources')
     + '<div class="review-scope">รายงานนี้คงสมการ S6006-R2 และไม่มีการอนุมัติทั้งโครงการ การเลือกมาตรฐานโครงการ เกณฑ์ยอมรับ แรงออกแบบ และกรณีน้ำยังต้องได้รับการตรวจทางวิศวกรรม</div>', 'sources', sources.length));
+  pages.push(...buildInvestigationAppendix({project,source,entries:selected.entries.map(entry=>({stationId:entry.station.id,scenarioId:entry.scenarioId}))}));
   return { pages, metadata };
 }
 

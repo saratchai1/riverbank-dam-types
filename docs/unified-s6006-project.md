@@ -27,6 +27,8 @@ Issue [#5](https://github.com/saratchai1/riverbank-dam-types/issues/5) เชื
 
 ไฟล์ใช้ `schema: riverbank.s6006.project`, `calculationRevision: S6006-R2` และ `projectCode: S6006` พร้อม `selectedStationId` กับ `stationScenarios` รุ่นแรกเป็น version 1 ส่วนโครงการใหม่เป็น version 2 ซึ่งเพิ่มการเก็บทางเลือกใน `stationComparisons` ตาม [คู่มือเปรียบเทียบทางเลือก](s6006-alternatives.md) ไฟล์และสำเนารายงาน version 1 ยังรองรับโดยคงรหัสรุ่นข้อมูลเดิม
 
+เมื่อบันทึกฐานอ้างอิงดินหรือน้ำครั้งแรก โครงการที่แก้จะเป็น **version 3** และเพิ่ม `stationInvestigations` สำหรับค่าปัจจุบันและสำเนาของแต่ละทางเลือก รูปแบบสถานการณ์และสมการยังเหมือนเดิม การเปิดไฟล์ version 1/2 ไม่อัปเกรดให้เองและคงรหัสเดิมไว้ ฐานอ้างอิงที่บันทึกอยู่ใน JSON โครงการและ snapshot รายงานตาม [คู่มือฐานอ้างอิงดินและน้ำ](s6006-investigation-basis.md)
+
 แต่ละสถานการณ์ที่แก้เก็บ:
 
 | ส่วน | ข้อมูล |

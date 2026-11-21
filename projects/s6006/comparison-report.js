@@ -1,6 +1,7 @@
 import { buildComparison, COMPARISON_GROUPS } from './comparison.js';
 import { loadComparisonProject } from './comparison-storage.js';
 import { METHOD_SOURCES, sourceURL } from './case-data.js';
+import { buildInvestigationAppendix } from './investigation-report.js';
 
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -311,6 +312,7 @@ export function buildComparisonReportPages({ project, source, createdAt, snapsho
     + '<h3>ฐานสมการที่ใช้ตรวจสอบ</h3><ol>' + METHOD_SOURCES.filter(item => /USACE|StructurePoint/.test(item.title)).map(item => '<li><a href="' + escapeHTML(item.url) + '">' + escapeHTML(item.title) + '</a><br><span class="minor">' + escapeHTML(item.location) + '</span></li>').join('') + '</ol>'
     + '<div class="comparison-scope">ผล Slope/W ในเอกสารเดิมหน้า 16–17 เป็นหลักฐานเดิม ไม่ใช่ผลของทางเลือกในรายงานนี้ การเปลี่ยนหน้าตัด ค่าดิน หรือกรณีน้ำต้องวิเคราะห์ระบบใหม่ก่อนรับรอง รายงานนี้เป็นการตรวจตัวเลขและซอฟต์แวร์ในขอบเขตที่ระบุ ไม่ใช่การรับรองโครงการ</div>', 'sources');
 
+  pages.push(...buildInvestigationAppendix({project,source,entries:entries.map(entry=>({stationId:selected.id,scenarioId:entry.id}))}));
   return { pages, metadata };
 }
 
