@@ -9,6 +9,7 @@ import { getStationComparison } from './project.js';
 import { saveComparisonSnapshot } from './comparison-storage.js';
 import { mountReview } from './review-ui.js';
 import { saveReviewSnapshot } from './review-storage.js';
+import { mountInvestigations } from './investigation-ui.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -16,7 +17,7 @@ const format = (value, digits=3) => value === null || value === undefined ? '—
 const unit = value => ({m:'ม.',m2:'ตร.ม.',m3:'ลบ.ม.',degree:'องศา'}[value] || value);
 const station = value => Math.floor(value/1000)+'+'+String(value%1000).padStart(3,'0');
 let inputs = {...DEFAULT_INPUTS};
-let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView, reviewView;
+let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView, reviewView, investigationView;
 const activeScenario = () => getActiveScenario(project);
 const fields = [
   ['length','ความยาวขยายรูปตัดทฤษฎี','ม. ไม่ใช่ช่วงสถานี',1000],['crestLevel','ระดับสันเขื่อน','ระดับสมมติ',101],['toeLevel','ระดับตีนเขื่อน','ระดับสมมติ',88],['slopeH','ลาดหน้าหิน','H : 1 V · ใช้ร่วมกับดิน',2.5],['rockThickness','ความหนาหินเรียง','ม. ตั้งฉากลาด',.5],['sandMinThickness','ชั้นทรายขั้นต่ำจำลอง','ม. ตั้งฉากลาด',1],['walkwayWidth','ความกว้างทางเท้า','ม.',2.95],['toeTopWidth','สันตีนหินจำลอง','ม.',1.5],['toeDepth','ความลึกตีนหินจำลอง','ม. ฐานราบสมมติ',2],['toeSlopeH','ลาดข้างตีนหิน','H : 1 V',1.5],
@@ -80,13 +81,13 @@ function renderProjectContext(){
 }
 function applyProject(next,{persist=true}={}){
   project=next;inputs=activeScenario().geometry;
-  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();reviewView?.render();renderStations();
+  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();reviewView?.render();investigationView?.render();renderStations();
   if(persist)persistProject();
 }
 function saveProject(){
   if(!project){notice('ข้อมูลโครงการยังไม่พร้อม',true);return;}
   download('S6006-project.json',serializeProject(project,source)+'\n','application/json');
-  notice('บันทึกโครงการเดียวแล้ว: สถานี มิติ คาน ดิน ระดับน้ำ ที่มา และทางเลือกที่เก็บของทุกสถานี');
+  notice('บันทึกโครงการเดียวแล้ว: สถานี มิติ คาน ดิน ระดับน้ำ ที่มา ทางเลือก และฐานอ้างอิงดิน–น้ำที่บันทึกไว้');
 }
 function changeStation(id){
   applyProject(selectStation(project,id,source));
@@ -94,7 +95,7 @@ function changeStation(id){
 }
 function setProjectControlsEnabled(enabled){
   for(const control of document.querySelectorAll('button,input,select,textarea'))control.disabled=!enabled;
-  if(enabled){renderProjectContext();comparisonView?.render();reviewView?.render();}
+  if(enabled){renderProjectContext();comparisonView?.render();reviewView?.render();investigationView?.render();}
 }
 function navigateReview({stationId,scenarioId,target}){
   try{
@@ -251,6 +252,11 @@ try{
   reviewView=mountReview($('#review-content'),{
     getProject:()=>project,getSource:()=>source,onNotice:notice,onDownload:download,
     onNavigate:navigateReview,onReport:openReviewReport,
+  });
+  investigationView=mountInvestigations($('#investigation-content'),{
+    getProject:()=>project,getSource:()=>source,onProjectChange:applyProject,
+    onNotice:notice,onDownload:download,
+    onNavigate:({stationId,scenarioId,section,field})=>navigateReview({stationId,scenarioId,target:{section,field}}),
   });
   applyProject(project,{persist:false});
   if(restoreError){notice('เปิดงานล่าสุดในเบราว์เซอร์ไม่ได้: '+restoreError+' ขณะนี้แสดงชุดเริ่มต้น กรุณาเปิดไฟล์โครงการที่บันทึกไว้',true);$('#persistence-status').textContent='งานล่าสุดยังไม่ได้โหลด · โปรดเปิดไฟล์โครงการ JSON';}

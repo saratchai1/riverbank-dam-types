@@ -250,7 +250,7 @@ export function buildReview(project, source) {
   // directly; avoid rescanning the whole project once per entry.
   for (const station of stations) {
     const scenario = own(project.stationScenarios, station.id) ? project.stationScenarios[station.id] : createDefaultScenario();
-    const comparison = project.version === 2 && own(project.stationComparisons, station.id)
+    const comparison = project.version >= 2 && own(project.stationComparisons, station.id)
       ? project.stationComparisons[station.id] : { referenceId: null, alternatives: [] };
     entries.push(makeEntry(station, scenario, { id: 'current', name: 'ค่าที่กำลังแก้', kind: 'current', createdAt: null, isReference: false }));
     for (const alternative of comparison.alternatives) entries.push(makeEntry(station, alternative.scenario, {
