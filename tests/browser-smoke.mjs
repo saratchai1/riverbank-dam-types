@@ -10,6 +10,7 @@ import { runS6006Checks } from './s6006-browser.mjs';
 import { runS6006ComparisonChecks } from './s6006-comparison-browser.mjs';
 import { runS6006ReviewChecks } from './s6006-review-browser.mjs';
 import { runS6006InvestigationChecks } from './s6006-investigation-browser.mjs';
+import { runS6006StudyChecks } from './s6006-study-browser.mjs';
 
 // Normal end-to-end tests run in CI with Playwright's installed Chromium.
 // Studio fixtures are synthetic. S6006 uses the reviewed derived numeric dataset; raw uploaded source files and tutorial images are not served.
@@ -359,6 +360,7 @@ try {
   await runS6006ComparisonChecks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
   await runS6006ReviewChecks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
   await runS6006InvestigationChecks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
+  await runS6006StudyChecks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output});
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed';
