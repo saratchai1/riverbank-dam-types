@@ -13,6 +13,51 @@ import {
 import { studyCSV } from '../projects/s6006/studies.js';
 import { parseStudyDocument,STUDY_SNAPSHOT_PREFIX } from '../projects/s6006/study-storage.js';
 
+// Chrome and Node can differ by an ulp in Math.atan2 and other transcendental
+// operations. Keep identifiers, inputs and narrative cells exact; only derived
+// numerical cells may use this tolerance. Same-browser exports stay byte-exact.
+function assertDerivedNumber(actual,expected,message) {
+  assert.match(actual,/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i,message+' is numeric');
+  const value=Number(actual);
+  assert.ok(Number.isFinite(value)&&Number.isFinite(expected),message+' is finite');
+  if(value===0||expected===0)assert.equal(value,expected,message+' preserves zero');
+  else assert.ok(Math.abs(value-expected)<=Math.max(16*Number.MIN_VALUE,16*Number.EPSILON*Math.max(Math.abs(value),Math.abs(expected))),message+': '+actual+' ≈ '+expected);
+}
+
+function parseCSV(text) {
+  const rows=[],row=[];let value='',quoted=false;
+  const data=text.replace(/^\uFEFF/,'');
+  for(let i=0;i<data.length;i++){
+    const c=data[i];
+    if(c==='"'){if(quoted&&data[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}
+    else if(c===','&&!quoted){row.push(value);value='';}
+    else if((c==='\r'||c==='\n')&&!quoted){if(c==='\r'&&data[i+1]==='\n')i++;row.push(value);rows.push([...row]);row.length=0;value='';}
+    else value+=c;
+  }
+  assert.equal(quoted,false,'CSV quoted fields are balanced');
+  if(value||row.length){row.push(value);rows.push([...row]);}
+  return rows;
+}
+
+function assertStudyCSV(actual,record) {
+  const expected=studyCSV(record),actualRows=parseCSV(actual),expectedRows=parseCSV(expected);
+  assert.ok(actual.startsWith('\uFEFF')&&actual.endsWith('\r\n'),'CSV preserves its BOM and final CRLF');
+  assert.deepEqual(actualRows[0],expectedRows[0],'CSV headers are exact');
+  assert.equal(actualRows.length,expectedRows.length,'CSV row count is exact');
+  const headers=expectedRows[0],typeIndex=headers.indexOf('row_type'),availabilityIndex=headers.indexOf('availability');
+  const numericColumns=new Set(['value','delta','delta_percent','limit']);
+  for(let r=1;r<expectedRows.length;r++){
+    const wanted=expectedRows[r],found=actualRows[r],type=wanted[typeIndex];
+    assert.equal(found.length,headers.length,'CSV column count in row '+r);
+    const derived=(['metric','formula'].includes(type)&&wanted[availabilityIndex]==='computed')||type==='condition';
+    for(let c=0;c<headers.length;c++){
+      const message='CSV row '+r+' '+headers[c];
+      if(derived&&numericColumns.has(headers[c])&&wanted[c]!==''&&Number.isFinite(Number(wanted[c])))assertDerivedNumber(found[c],Number(wanted[c]),message);
+      else assert.equal(found[c],wanted[c],message);
+    }
+  }
+}
+
 // Every mutation below is synthetic data in fresh isolated browser contexts.
 export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErrors,assertNoOverflow,download,chooseFile,changeValue,baseURL,output}) {
   const source=JSON.parse(await readFile(new URL('../projects/s6006/source-data.json',import.meta.url),'utf8'));
@@ -57,7 +102,9 @@ export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErro
     for(const point of [record.baseline,...record.samples]){
       const cell=point.metrics[metricId];
       assert.equal(await page.locator('[data-study-row="'+point.id+'"]').getAttribute('data-availability'),cell.availability);
-      assert.equal(await page.locator('[data-study-value="'+point.id+'"]').innerText(),cell.availability==='computed'?String(cell.value):'—');
+      const displayed=await page.locator('[data-study-value="'+point.id+'"]').innerText();
+      if(cell.availability==='computed')assertDerivedNumber(displayed,cell.value,point.id+' metric value');
+      else assert.equal(displayed,'—');
       assert.equal(await page.locator('[data-study-x="'+point.id+'"]').innerText(),point.x===null?'—':String(point.x));
     }
   };
@@ -118,12 +165,15 @@ export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErro
     await assertMetricCells(p,originalStudy.record,'soil.dry.fs');
     assert.equal(await p.locator('svg [data-study-chart-point]').count(),9);
     assert.equal(await p.locator('#study-freshness').getAttribute('data-source-state'),'current');
+    const beforeDraftCSV=await download(p,'#export-study-csv','s6006-study-before-draft.csv');
+    const beforeDraftText=await readFile(beforeDraftCSV,'utf8');
+    assertStudyCSV(beforeDraftText,originalStudy.record);
     await scrollTop(p,'.study-result-head');await screenshot(p,'s6006-study-desktop.png',false);
     await changeValue(p,'#study-max','4.12500');
     assert.equal(await p.locator('#study-results').getAttribute('data-run-id'),id);
     assert.equal(await p.locator('#study-freshness').getAttribute('data-config-state'),'changed');
     const csv=await download(p,'#export-study-csv','s6006-study-first.csv');
-    assert.equal(await readFile(csv,'utf8'),studyCSV(originalStudy.record),'Draft changes cannot change captured export');
+    assert.equal(await readFile(csv,'utf8'),beforeDraftText,'Draft changes cannot change captured export bytes');
     await panel(p,'engineering');await changeValue(p,'#beam-form [name="externalMuKnM"]',32);await panel(p,'study');
     assert.equal(await p.locator('#study-max').inputValue(),'4.12500','Unrelated form renders preserve the local study draft');
     assert.equal(await p.locator('#study-results').getAttribute('data-run-id'),id);
@@ -172,6 +222,9 @@ export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErro
     await importProject(p,optionsProject,'s6006-study-options-project.json');
     await configure(p,'geometry.slopeH',2,4,9,'study-a');const revision=await p.locator('#project-revision').innerText();await run(p);
     const saved=await savedDocument(p,'s6006-study-saved-source.json');
+    const savedCSV=await download(p,'#export-study-csv','s6006-study-saved-before-import.csv');
+    const savedCSVText=await readFile(savedCSV,'utf8');
+    assertStudyCSV(savedCSVText,saved.record);
     assert.equal(saved.record.selection.scenarioId,'study-a');assert.equal(saved.record.baseline.x,3.5);
     assert.equal(await p.locator('#geometry-form [name="slopeH"]').inputValue(),'3.8');
     assert.equal(await p.locator('#project-revision').innerText(),revision);
@@ -196,7 +249,7 @@ export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErro
     const roundtrip=await savedDocument(p,'s6006-study-saved-roundtrip.json');
     assert.deepEqual(roundtrip.document,saved.document);
     const csv=await download(p,'#export-study-csv','s6006-study-saved.csv');
-    assert.equal(await readFile(csv,'utf8'),studyCSV(saved.record));
+    assert.equal(await readFile(csv,'utf8'),savedCSVText,'Reimporting the same study preserves same-browser CSV bytes');
     const corrupted=JSON.parse(await readFile(saved.file,'utf8'));corrupted.config.maximum=9;
     const corruptFile=path.join(output,'fixtures','s6006-study-corrupt.json');await writeFile(corruptFile,JSON.stringify(corrupted));
     await chooseFile(p,'#import-study-json',corruptFile);
@@ -278,7 +331,7 @@ export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErro
     assert.equal(await m.locator('#geometry-form [name="slopeH"]').inputValue(),'3.8');
     await configure(m,'geometry.slopeH',2,4,7);await run(m);
     const saved=await savedDocument(m,'s6006-study-mobile.json');assert.equal(saved.record.selection.scenarioId,'study-a');
-    const csv=await download(m,'#export-study-csv','s6006-study-mobile.csv');assert.equal(await readFile(csv,'utf8'),studyCSV(saved.record));
+    const csv=await download(m,'#export-study-csv','s6006-study-mobile.csv');assertStudyCSV(await readFile(csv,'utf8'),saved.record);
     await assertNoOverflow(m,'Study saved-source mobile');assertNoErrors(mobile.diagnostics);
   });
 }
