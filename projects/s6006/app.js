@@ -10,6 +10,8 @@ import { saveComparisonSnapshot } from './comparison-storage.js';
 import { mountReview } from './review-ui.js';
 import { saveReviewSnapshot } from './review-storage.js';
 import { mountInvestigations } from './investigation-ui.js';
+import { mountStudies } from './study-ui.js';
+import { saveStudySnapshot } from './study-storage.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -17,7 +19,7 @@ const format = (value, digits=3) => value === null || value === undefined ? '—
 const unit = value => ({m:'ม.',m2:'ตร.ม.',m3:'ลบ.ม.',degree:'องศา'}[value] || value);
 const station = value => Math.floor(value/1000)+'+'+String(value%1000).padStart(3,'0');
 let inputs = {...DEFAULT_INPUTS};
-let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView, reviewView, investigationView;
+let source, audit, normalized, scene, project, catalog, engineeringView, comparisonView, reviewView, investigationView, studyView;
 const activeScenario = () => getActiveScenario(project);
 const fields = [
   ['length','ความยาวขยายรูปตัดทฤษฎี','ม. ไม่ใช่ช่วงสถานี',1000],['crestLevel','ระดับสันเขื่อน','ระดับสมมติ',101],['toeLevel','ระดับตีนเขื่อน','ระดับสมมติ',88],['slopeH','ลาดหน้าหิน','H : 1 V · ใช้ร่วมกับดิน',2.5],['rockThickness','ความหนาหินเรียง','ม. ตั้งฉากลาด',.5],['sandMinThickness','ชั้นทรายขั้นต่ำจำลอง','ม. ตั้งฉากลาด',1],['walkwayWidth','ความกว้างทางเท้า','ม.',2.95],['toeTopWidth','สันตีนหินจำลอง','ม.',1.5],['toeDepth','ความลึกตีนหินจำลอง','ม. ฐานราบสมมติ',2],['toeSlopeH','ลาดข้างตีนหิน','H : 1 V',1.5],
@@ -81,7 +83,7 @@ function renderProjectContext(){
 }
 function applyProject(next,{persist=true}={}){
   project=next;inputs=activeScenario().geometry;
-  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();reviewView?.render();investigationView?.render();renderStations();
+  formFields();renderModel();renderProjectContext();engineeringView?.render();comparisonView?.render();reviewView?.render();investigationView?.render();studyView?.render();renderStations();
   if(persist)persistProject();
 }
 function saveProject(){
@@ -95,7 +97,7 @@ function changeStation(id){
 }
 function setProjectControlsEnabled(enabled){
   for(const control of document.querySelectorAll('button,input,select,textarea'))control.disabled=!enabled;
-  if(enabled){renderProjectContext();comparisonView?.render();reviewView?.render();investigationView?.render();}
+  if(enabled){renderProjectContext();comparisonView?.render();reviewView?.render();investigationView?.render();studyView?.render();}
 }
 function navigateReview({stationId,scenarioId,target}){
   try{
@@ -137,6 +139,14 @@ function openComparisonReport(){
     notice('เตรียมรายงานเปรียบเทียบจากค่าที่บันทึกแล้ว หากแท็บใหม่ไม่เปิด ให้กดลิงก์นี้: ');
     const link=document.createElement('a');link.href=snapshot.url;link.target='_blank';link.rel='noopener';link.textContent='เปิดรายงานเปรียบเทียบฉบับนี้ ↗';$('#notice').append(link);
   }catch(error){notice('เปิดรายงานเปรียบเทียบไม่ได้: '+error.message,true);}
+}
+function openStudyReport({document,metricId,pointId}){
+  try{
+    const snapshot=saveStudySnapshot(document,source,window.localStorage,{metricId,pointId});
+    window.open(snapshot.url,'_blank','noopener');
+    notice('เตรียมรายงานจากชุดทดลองที่เก็บไว้แล้ว หากแท็บใหม่ไม่เปิด ให้กดลิงก์นี้: ');
+    const link=window.document.createElement('a');link.href=snapshot.url;link.target='_blank';link.rel='noopener';link.textContent='เปิดรายงานทดลองฉบับนี้ ↗';$('#notice').append(link);
+  }catch(error){notice('เปิดรายงานทดลองไม่ได้: '+error.message+' กรุณาบันทึกไฟล์ชุดทดลอง JSON ไว้ก่อน',true);}
 }
 function renderSummary(){
   const rows=Object.entries(audit.composedTotals).map(([key,r])=>'<tr><td>'+escape(AGGREGATE_LABELS[key]||key)+'</td><td class="num">'+format(r.sourceAdoptedValue,0)+'</td><td class="num">'+format(r.roundedDownKnownValue,0)+'</td><td class="num delta">'+format(r.deltaRoundedKnownToSourceAdopted,0)+'</td><td>'+unit(r.unit)+'</td><td><span class="status '+(r.complete?'':'amber')+'">'+(r.complete?'ข้อมูลตั้งต้นครบ':'ยอดเฉพาะค่าที่ทราบ')+'</span><small>'+(r.complete?'':r.missingCount+' ค่าตั้งต้นว่าง · ')+r.sourceMissingCount+' ผลคูณเดิมว่าง</small></td></tr>');
@@ -257,6 +267,10 @@ try{
     getProject:()=>project,getSource:()=>source,onProjectChange:applyProject,
     onNotice:notice,onDownload:download,
     onNavigate:({stationId,scenarioId,section,field})=>navigateReview({stationId,scenarioId,target:{section,field}}),
+  });
+  studyView=mountStudies($('#study-content'),{
+    getProject:()=>project,getSource:()=>source,onNotice:notice,onDownload:download,
+    onNavigate:navigateReview,onReport:openStudyReport,
   });
   applyProject(project,{persist:false});
   if(restoreError){notice('เปิดงานล่าสุดในเบราว์เซอร์ไม่ได้: '+restoreError+' ขณะนี้แสดงชุดเริ่มต้น กรุณาเปิดไฟล์โครงการที่บันทึกไว้',true);$('#persistence-status').textContent='งานล่าสุดยังไม่ได้โหลด · โปรดเปิดไฟล์โครงการ JSON';}

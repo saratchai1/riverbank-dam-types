@@ -1,0 +1,25 @@
+.study-print-page h1{font-size:29px}.study-print-page h2{font-size:19px}
+.study-print-page table{table-layout:fixed;font-size:9px;line-height:1.65}
+.study-print-page td,.study-print-page th{overflow-wrap:anywhere;padding:7px 6px}
+.study-print-page td small{font-size:8px;line-height:1.65;color:#6b7b68}
+.study-print-identity th:first-child{width:35%}.study-print-inputs th:first-child{width:47%}.study-print-inputs th:last-child{width:21%}
+.study-print-chart{width:100%;margin:12px 0 15px}.study-print-chart svg{display:block;width:100%;height:auto;max-height:310px}
+.study-print-selected th:nth-child(1){width:14%}.study-print-selected th:nth-child(2){width:16%}.study-print-selected th:nth-child(3){width:36%}.study-print-selected th:nth-child(4),.study-print-selected th:nth-child(5){width:17%}
+.study-print-metrics th:first-child{width:17%}.study-print-number{display:block;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.study-print-state{display:block;font-size:8px;margin:3px 0;color:#657c65}
+.study-print-formulas th:nth-child(1){width:25%}.study-print-formulas th:nth-child(2){width:43%}.study-print-formulas th:nth-child(3){width:18%}.study-print-formulas th:nth-child(4){width:14%}
+.study-print-formula{font:9px/1.7 ui-monospace,monospace;overflow-wrap:anywhere}.study-print-formulas td{padding:9px 6px}
+.study-print-checks th:nth-child(1){width:28%}.study-print-checks th:nth-child(2){width:18%}.study-print-checks th:nth-child(3){width:21%}.study-print-checks th:nth-child(4){width:33%}
+.study-print-sources th:first-child{width:48%}.study-print-literal{font-size:10px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;border:1px solid #dbe2d7;padding:12px;background:#f6f8f2}
+.study-print-page .study-basis-heading{font-size:9px;padding:6px 8px;background:#f8f1df;color:#795e35;border-left:3px solid #ac8a49;margin:0 0 10px}
+.study-print-page .running-foot{grid-template-columns:minmax(0,1fr) 140px}
+@media screen and (max-width:820px){
+  .study-print-table-wrap{max-width:100%;overflow-x:auto}.study-print-page .study-print-table-wrap table{display:table;margin:0 0 12px;min-width:560px}
+  .study-print-page .study-print-table-wrap .study-print-identity,.study-print-page .study-print-table-wrap .study-print-inputs{min-width:0}
+  .study-print-page .running-foot{grid-template-columns:minmax(0,1fr) 85px}
+}
+@media print{
+  .study-print-table-wrap{overflow:visible}.study-print-page .study-print-table-wrap table{width:100%;min-width:0}
+  .study-print-chart,.study-print-literal{break-inside:avoid}
+  body[data-report-state="blocked"] #study-report-ready,body[data-report-state="loading"] #study-report-ready{display:none}
+}
