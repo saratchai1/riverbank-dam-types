@@ -323,6 +323,13 @@ export async function runS6006StudyChecks({newPage,check,screenshot,assertNoErro
     assert.equal(await m.locator('#study-point-detail').evaluate(el=>el===document.activeElement),true);
     await scrollTop(m,'#study-point-detail');
     assert.ok(await m.evaluate(()=>window.scrollY)>chartY+200,'Point-details screenshot actually shows the deeper result section');
+    const headline=await m.locator('#study-point-detail .study-point-value strong').evaluate(element=>{
+      const range=document.createRange();range.selectNodeContents(element);
+      const rects=[...range.getClientRects()],card=element.closest('#study-point-detail').getBoundingClientRect();
+      return {lines:new Set(rects.map(rect=>Math.round(rect.top))).size,left:Math.min(...rects.map(rect=>rect.left)),right:Math.max(...rects.map(rect=>rect.right)),cardLeft:card.left,cardRight:card.right};
+    });
+    assert.equal(headline.lines,1,'The selected numeric result stays on one readable line at 390px');
+    assert.ok(headline.left>=headline.cardLeft&&headline.right<=headline.cardRight,'The full numeric result fits inside its mobile detail card');
     await screenshot(m,'s6006-study-point-mobile.png',false);
     await m.locator('[data-study-calculation="soil"] > summary').click();
     await scrollTop(m,'[data-study-calculation="soil"]');await screenshot(m,'s6006-study-formulas-mobile.png',false);
